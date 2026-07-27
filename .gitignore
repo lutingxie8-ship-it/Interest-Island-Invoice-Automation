@@ -1,0 +1,11 @@
+# 运行时临时文件
+automation/interest_island_input.json
+automation/interest_island_output.json
+
+# 空目录占位
+logs/*
+screenshots/*
+
+# 系统文件
+.DS_Store
+Thumbs.db
