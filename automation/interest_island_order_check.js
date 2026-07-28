@@ -135,6 +135,58 @@ async function waitForDetailPanel(page, timeoutMs) {
   return { ok: false, body: lastBody, error: 'timeout' };
 }
 
+// ===================== 滚动详情面板，确保完整内容可见 =====================
+// 关键修复：el-drawer__body 有滚动条（scrollHeight > clientHeight），
+// 发票信息在折叠区域下方，不滚动会漏检导致误判 not_invoiced
+async function scrollDetailPanelComplete(page) {
+  // 找到详情面板的滚动容器
+  var containerInfo = await page.evaluate(function() {
+    var candidates = ['.el-drawer__body', '.el-drawer__wrapper', '.el-drawer',
+                     '.el-dialog__body', '.el-dialog__wrapper', '.el-dialog'];
+    for (var i = 0; i < candidates.length; i++) {
+      var el = document.querySelector(candidates[i]);
+      if (el && el.scrollHeight > el.clientHeight) {
+        return { found: true, selector: candidates[i],
+                 scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
+      }
+    }
+    return { found: false };
+  });
+
+  if (!containerInfo.found) {
+    return { scrolled: false, body: await page.evaluate(function() { return document.body.innerText || ''; }) };
+  }
+
+  // 逐步滚动到底部，收集完整文本
+  var allText = '';
+  var step = 300;
+  var maxScroll = containerInfo.scrollHeight;
+
+  for (var pos = 0; pos <= maxScroll; pos += step) {
+    await page.evaluate(function(pos) {
+      var candidates = ['.el-drawer__body', '.el-drawer__wrapper', '.el-drawer',
+                       '.el-dialog__body', '.el-dialog__wrapper', '.el-dialog'];
+      for (var i = 0; i < candidates.length; i++) {
+        var el = document.querySelector(candidates[i]);
+        if (el && el.scrollHeight > el.clientHeight) {
+          el.scrollTop = pos;
+          return;
+        }
+      }
+    }, pos);
+    await page.waitForTimeout(200);
+
+    allText = await page.evaluate(function() { return document.body.innerText || ''; });
+
+    // 如果找到发票信息，可以提前退出
+    if (allText.indexOf('发票信息') >= 0 || allText.indexOf('发票抬头') >= 0) {
+      break;
+    }
+  }
+
+  return { scrolled: true, body: allText, containerInfo: containerInfo };
+}
+
 // ===================== 解析详情 + 检测发票 =====================
 function parseAndDetect(bodyText) {
   var fields = {};
@@ -286,8 +338,16 @@ async function main() {
     return result;
   }
 
-  // 8) 解析详情 + 发票检测
-  var analysis = parseAndDetect(panelRes.body);
+  // 7.5) 滚动详情面板，确保发票信息完整可见（关键修复！）
+  var scrollRes = await scrollDetailPanelComplete(page);
+  log('SCROLL', 'detail panel scrolled', {
+    scrolled: scrollRes.scrolled,
+    container: scrollRes.containerInfo ? scrollRes.containerInfo.selector : null,
+    hasInvoice: scrollRes.body.indexOf('发票信息') >= 0
+  });
+
+  // 用滚动后的完整文本做解析
+  var analysis = parseAndDetect(scrollRes.body);
   log('ANALYSIS', 'invoice check', {
     hasInvoice: analysis.hasInvoiceSection,
     invoiceType: analysis.invoiceData ? analysis.invoiceData['发票类型'] : null,

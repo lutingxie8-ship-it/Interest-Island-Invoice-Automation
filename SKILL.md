@@ -125,6 +125,7 @@ cat ~/.dev-browser/tmp/interest_island_output.json
 | 执行脚本 | heredoc `<<'SCRIPT'` (引号冲突) | `dev-browser run "path.js"` |
 | Windows 路径 | `"C:\\Users\\..."` 双反斜杠 (静默崩溃) | `"C:\Users\..."` 单反斜杠 |
 | 登录检测 | 文本匹配"退出登录" (误报) | 导航后检查 URL 是否含 `/login` |
+| **详情面板** | 只读首屏 `innerText` (漏检发票) | **滚动 `el-drawer__body` 到底再读取** |
 
 ## 已验证测试场景
 
@@ -132,6 +133,7 @@ cat ~/.dev-browser/tmp/interest_island_output.json
 |--------|---------|------|------|
 | `9000000619462400` | 增值税专用发票 | 湖南金格建筑科技有限公司 | ✅ 已开票 |
 | `9000000783104504` | 电子普通发票 | 党霄霞（个人） | ✅ 已开票 |
+| `9000000776180002` | 电子普通发票 | 重庆市綦江区源聚农业旅游开发有限公司 | ✅ 已开票（滚动修复后） |
 
 ## 约束
 
@@ -140,6 +142,7 @@ cat ~/.dev-browser/tmp/interest_island_output.json
 3. **禁止保存密码/模拟扫码**！仅复用用户扫码后的 session
 4. **detail drawer 是 portal 渲染**，必须从 `document.body.innerText` 提取内容
 5. **Vue 组件路径**：`app.__vue__.$children[2].$children[2].$children[0]`（页面改版时需验证）
+6. **详情面板必须滚动**！`el-drawer__body` 有滚动条（scrollHeight > clientHeight），发票信息在折叠区域下方，不滚动会漏检导致误判 `not_invoiced`
 
 ## 已知限制
 
