@@ -9,13 +9,14 @@
 | Skill | 目录 | 功能 |
 |-------|------|------|
 | 订单开票核验 | [skills/order-invoice-checker](skills/order-invoice-checker/SKILL.md) | 查询订单是否已开票（Vue 直驱 + 只读查询） |
+| 企微发票查询 | [skills/wecom-invoice-query](skills/wecom-invoice-query/SKILL.md) | 在企微文档内查询订单号是否已存在开票记录（只读） |
 | 企微发票录入 | [skills/wecom-invoice-import](skills/wecom-invoice-import/SKILL.md) | 把税务局导出的 Excel 发票记录批量录入企微在线表格 |
 
 ---
 
 ## 环境依赖
 
-两个 skill 共用以下环境：
+三个 skill 共用以下环境：
 
 1. **dev-browser**（浏览器自动化工具）：WorkBuddy 自带，其他环境 `npm install -g dev-browser && dev-browser install`
 2. **Python 3.8+**：WorkBuddy 自带
@@ -53,6 +54,20 @@
 
 ---
 
+## Skill 3：企微发票查询
+
+**位置**：`skills/wecom-invoice-query/`
+
+在企微在线表格内查询订单号是否已存在开票记录（只读，不录入）。
+
+- 用引擎 API 遍历"订单ID"列查询，不用 Ctrl+F（canvas 键盘不响应）
+- 3 步流程：打开文档 → 登录确认 → 引擎 API 查询
+- 输入：订单号；输出：找到/找不到
+
+详见 [skills/wecom-invoice-query/SKILL.md](skills/wecom-invoice-query/SKILL.md)
+
+---
+
 ## 目录结构
 
 ```
@@ -60,11 +75,15 @@ Interest-Island-Invoice-Automation/
 ├── README.md                              ← 本文件（总览）
 ├── .gitignore
 ├── skills/
-│   ├── order-invoice-checker/             ← 订单开票核验
+│   ├── order-invoice-checker/             ← Skill 1：订单开票核验
 │   │   ├── SKILL.md
 │   │   ├── automation/                    ← dev-browser 自动化脚本
 │   │   └── config/                        ← 配置文件
-│   └── wecom-invoice-import/              ← 企微发票录入
+│   ├── wecom-invoice-query/               ← Skill 2：企微发票查询（新增）
+│   │   ├── SKILL.md
+│   │   └── scripts/
+│   │       └── setup.py                   ← 环境检查
+│   └── wecom-invoice-import/              ← Skill 3：企微发票录入
 │       ├── SKILL.md
 │       └── scripts/
 │           ├── setup.py                   ← 环境检查与依赖安装
@@ -77,6 +96,7 @@ Interest-Island-Invoice-Automation/
 
 ## 版本
 
+- **v4.0.0** (2026-07-28)：新增企微发票查询 skill（只读查询订单号是否已开票）
 - **v3.0.0** (2026-07-28)：重构为多 skill 仓库结构，新增企微发票录入 skill
 - **v2.0.0** (2026-07-27)：订单核验 skill 全面重写为 QuickJS 兼容 + Vue 直驱
 - **v1.0.0** (2026-07-27)：订单核验 skill 初版
