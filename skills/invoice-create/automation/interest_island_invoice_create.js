@@ -137,19 +137,31 @@ async function navigateToInvoiceReview(page) {
   log('NAV', 'arrived at invoice review', { url: page.url() });
 }
 
-// ===================== 点击"批量开票"按钮 =====================
+// ===================== 点击"新建"按钮 =====================
 async function clickNewInvoiceButton(page) {
   return await page.evaluate(function() {
-    // 找文本为"批量开票"的按钮
+    // 优先找文本为"新建"的按钮（不是"批量开票"——那个会弹出保密承诺函）
     var btns = document.querySelectorAll('button');
+    var candidates = [];
     for (var i = 0; i < btns.length; i++) {
       var txt = (btns[i].textContent || '').trim();
-      if (txt === '批量开票' || txt === '新建' || txt.indexOf('批量开票') >= 0) {
-        btns[i].click();
-        return { ok: true, clicked_text: txt };
+      if (txt === '新建' || txt === '新建发票') {
+        candidates.push({ el: btns[i], text: txt });
       }
     }
-    return { ok: false, error: '未找到"批量开票"按钮' };
+    if (candidates.length > 0) {
+      candidates[0].el.click();
+      return { ok: true, clicked_text: candidates[0].text };
+    }
+    // 备选：找"批量开票"
+    for (var i = 0; i < btns.length; i++) {
+      var txt2 = (btns[i].textContent || '').trim();
+      if (txt2 === '批量开票') {
+        btns[i].click();
+        return { ok: true, clicked_text: txt2, warning: '使用了批量开票按钮（可能弹出保密承诺函）' };
+      }
+    }
+    return { ok: false, error: '未找到"新建"或"批量开票"按钮' };
   });
 }
 
@@ -158,14 +170,18 @@ async function waitForDialog(page, timeoutMs) {
   var start = Date.now();
   while (Date.now() - start < timeoutMs) {
     var state = await page.evaluate(function(title) {
-      // el-dialog 是 portal 渲染，挂在 body 下
-      var dialogs = document.querySelectorAll('.el-dialog, .el-dialog__wrapper, [role="dialog"]');
+      // el-dialog__wrapper 是 position:fixed，offsetParent 永远是 null，不能用它判断可见性
+      // 只检查 display !== 'none' 且标题匹配
+      var dialogs = document.querySelectorAll('.el-dialog__wrapper');
       for (var i = 0; i < dialogs.length; i++) {
         var d = dialogs[i];
-        // 检查对话框标题
+        if (d.style.display === 'none') continue;
         var titleEl = d.querySelector('.el-dialog__title');
         if (titleEl && (titleEl.textContent || '').indexOf(title) >= 0) {
-          return { found: true, dialogIndex: i };
+          // 额外验证：body 有内容
+          var body = d.querySelector('.el-dialog__body');
+          var hasContent = body && body.innerText && body.innerText.length > 5;
+          return { found: true, dialogIndex: i, hasContent: hasContent };
         }
       }
       return { found: false };
@@ -603,9 +619,10 @@ async function main() {
   return result;
 }
 
-// 运行
-main().then(function(r) {
+// 运行（⚠️ QuickJS 沙箱必须用顶层 await，main().then() 会被脚本退出截断）
+try {
+  var r = await main();
   log('DONE', 'script complete', { result_status: r && r.result_status });
-}).catch(function(e) {
+} catch (e) {
   log('FATAL', 'unhandled error', { message: String(e), stack: e && e.stack ? String(e.stack) : 'none' });
-});
+}

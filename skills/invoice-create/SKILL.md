@@ -159,6 +159,9 @@ cat ~/.dev-browser/tmp/interest_island_invoice_create_output.json
 
 | 问题 | 错误做法 | 正确做法 |
 |------|---------|---------|
+| 脚本静默截断 | `main().then().catch()` | **顶层 `await main()`**（QuickJS 沙箱中 `then()` 异步会被脚本退出截断，只输出第一行日志）|
+| 按钮选错 | 点击"批量开票" | 点击"**新建**"（批量开票按钮会触发"保密承诺函"弹窗，不是"新建发票"）|
+| 弹窗可见性判断 | 用 `element.offsetParent` | 只检查 `style.display !== 'none'`（`.el-dialog__wrapper` 是 `position:fixed`，**fixed 元素的 offsetParent 永远是 null**）|
 | 订单ID未识别 | 用原生 DOM 操作填 input | 用 Vue 组件直驱（`input.dispatchEvent('input')` + `change`），触发后端 API 自动填充 |
 | 自动填充超时 | 填写后立即点确定 | 轮询等待"所属品类/商品名称/用户ID"三个字段从空变非空，最多 8 秒 |
 | 发票类型/抬头类型下拉 | 用 `page.locator('option').selectOption()` | el-select 是 portal 渲染的，需先点开 → 再点选项文本 |
@@ -172,9 +175,9 @@ cat ~/.dev-browser/tmp/interest_island_invoice_create_output.json
 
 > 测试模式（confirm=false），只填到弹窗可提交状态，不点确定。
 
-| 订单号 | 发票类型 | 抬头类型 | 状态 |
-|--------|---------|---------|------|
-| （待测试） | | | |
+| 订单号 | 发票类型 | 抬头类型 | 期望行为 | 实际结果 |
+|--------|---------|---------|---------|---------|
+| `12345` (测试用假订单号) | 电子普通发票 | 个人/非企业 | 订单ID 已填写，3 个 auto-fill 字段超时未填充，安全退出 | ✅ `auto_fill_timeout`，`confirm_executed=false` |
 
 ## 安全约束（最高优先级）
 
