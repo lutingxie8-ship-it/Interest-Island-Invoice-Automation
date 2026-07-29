@@ -217,11 +217,12 @@ async function findInputInDialog(page, labelText) {
 // ===================== 在弹窗内通过 label 设置 input 值（Vue v-model） =====================
 // 关键是 dispatch input + change 事件，让 Vue 监听到
 async function setInputValueInDialog(page, labelText, value) {
-  return await page.evaluate(function(args) {
+  var setRes = await page.evaluate(function(args) {
     var labelText = args.labelText;
     var value = args.value;
     var dialogs = document.querySelectorAll('.el-dialog__wrapper');
     for (var d = 0; d < dialogs.length; d++) {
+      if (dialogs[d].style.display === 'none') continue;
       var dialog = dialogs[d];
       var items = dialog.querySelectorAll('.el-form-item');
       for (var i = 0; i < items.length; i++) {
@@ -243,6 +244,11 @@ async function setInputValueInDialog(page, labelText, value) {
     }
     return { ok: false, error: 'label not found in dialog: ' + labelText };
   }, { labelText: labelText, value: String(value) });
+
+  // 等 Vue 响应式更新 v-model（nextTick）
+  if (setRes.ok) await page.waitForTimeout(300);
+
+  return setRes;
 }
 
 // ===================== 等待订单ID自动填充 =====================
@@ -282,18 +288,21 @@ async function waitForAutoFill(page, timeoutMs) {
 }
 
 // ===================== 选择 el-select（发票类型/抬头类型） =====================
+// Element UI dropdown 在 evaluate 里调用 .click() 经常不触发关闭。
+// 最可靠的方法：用 page.mouse.click 发送真实鼠标事件到 dropdown item 坐标。
+// 注意：首次触发 dropdown 时可能有 200-500ms 渲染延迟，getBoundingClientRect 可能返回 0,0，需重试
 async function selectElSelectOption(page, labelText, optionText) {
-  // 第1步：在弹窗内找到对应 label 的 el-select 容器并点击触发
+  // 第1步：触发 dropdown
   var triggerRes = await page.evaluate(function(labelText) {
     var dialogs = document.querySelectorAll('.el-dialog__wrapper');
     for (var d = 0; d < dialogs.length; d++) {
+      if (dialogs[d].style.display === 'none') continue;
       var items = dialogs[d].querySelectorAll('.el-form-item');
       for (var i = 0; i < items.length; i++) {
         var labelEl = items[i].querySelector('.el-form-item__label');
         if (labelEl && (labelEl.textContent || '').replace(/[*\s]/g, '').indexOf(labelText) >= 0) {
           var select = items[i].querySelector('.el-select');
           if (!select) return { ok: false, error: '.el-select not found for: ' + labelText };
-          // 点击 .el-select__wrapper 触发 dropdown
           var wrapper = select.querySelector('.el-select__wrapper') || select;
           wrapper.click();
           return { ok: true };
@@ -305,64 +314,132 @@ async function selectElSelectOption(page, labelText, optionText) {
 
   if (!triggerRes.ok) return triggerRes;
 
-  await page.waitForTimeout(1500);  // 等 dropdown 出现（portal 渲染）
+  await page.waitForTimeout(2000);  // 等 dropdown 完整渲染
 
-  // 第2步：在全局查找 dropdown 内的选项并点击
-  var selectRes = await page.evaluate(function(optionText) {
-    var dropdowns = document.querySelectorAll('.el-select-dropdown, .el-select-dropdown__list');
-    for (var d = 0; d < dropdowns.length; d++) {
-      var items = dropdowns[d].querySelectorAll('.el-select-dropdown__item');
-      for (var i = 0; i < items.length; i++) {
-        var txt = (items[i].textContent || '').trim();
-        if (txt === optionText || txt.indexOf(optionText) >= 0) {
-          items[i].click();
-          return { ok: true, clicked: txt };
+  // 第2步：找到目标 item 的中心坐标（重试机制：避免 dropdown 未渲染完时 getBoundingClientRect=0,0）
+  var coords = null;
+  for (var retry = 0; retry < 3; retry++) {
+    coords = await page.evaluate(function(optionText) {
+      var dropdowns = document.querySelectorAll('.el-select-dropdown__list');
+      for (var d = 0; d < dropdowns.length; d++) {
+        // 只考虑可见的 dropdown
+        var ddList = dropdowns[d];
+        var ddWrapper = ddList.closest('.el-select-dropdown');
+        if (ddWrapper && ddWrapper.style.display === 'none') continue;
+        var items = ddList.querySelectorAll('.el-select-dropdown__item');
+        for (var i = 0; i < items.length; i++) {
+          var txt = (items[i].textContent || '').trim();
+          if (txt === optionText || txt.indexOf(optionText) >= 0) {
+            var rect = items[i].getBoundingClientRect();
+            // 确保 rect 不是 0（说明元素可见）
+            if (rect.width > 0 && rect.height > 0) {
+              return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, w: rect.width, h: rect.height };
+            }
+          }
         }
       }
-    }
-    return { ok: false, error: 'option not found in dropdown: ' + optionText };
-  }, optionText);
+      return null;
+    }, optionText);
+    if (coords) break;
+    await page.waitForTimeout(500);
+  }
 
-  return selectRes;
+  if (!coords) {
+    return { ok: false, error: 'option not found or not visible: ' + optionText };
+  }
+
+  // 第3步：用 page.mouse.click 发送真实鼠标事件
+  await page.mouse.click(coords.x, coords.y);
+  await page.waitForTimeout(1000);  // 等 dropdown 关闭 + Vue 更新 v-model
+
+  return { ok: true, clicked: optionText, coords: coords };
 }
 
 // ===================== 上传 PDF =====================
+// QuickJS 沙箱没有 fs 模块，page.setInputFiles 不可用
+// 方案：readFile 读取 PDF 内容 → 传给 page.evaluate → 在浏览器里用 DataTransfer + File 构造文件 → 设置到 input[type=file]
 async function uploadPdf(page, pdfPath) {
-  return await page.evaluate(function() {
+  // 1. 从路径提取文件名
+  var fileName = 'invoice.pdf';
+  var lastSlash = Math.max(pdfPath.lastIndexOf('/'), pdfPath.lastIndexOf('\\'));
+  if (lastSlash >= 0) fileName = pdfPath.substring(lastSlash + 1);
+
+  // 2. 用 QuickJS readFile 读取文件内容
+  var fileContent;
+  try {
+    // readFile 路径自动指向 ~/.dev-browser/tmp/，需要用相对路径
+    // 如果 pdfPath 是绝对路径，需要提取文件名
+    var tmpFileName = fileName;
+    if (pdfPath.indexOf('.dev-browser') >= 0 || pdfPath.indexOf('tmp/') >= 0) {
+      tmpFileName = lastSlash >= 0 ? pdfPath.substring(lastSlash + 1) : pdfPath;
+    }
+    fileContent = await readFile(tmpFileName);
+    log('UPLOAD_PDF', 'readFile done', { fileName: tmpFileName, contentLength: fileContent.length });
+  } catch (e) {
+    return { ok: false, error: 'readFile 读取 PDF 失败: ' + String(e) + '（路径: ' + pdfPath + '）' };
+  }
+
+  // 3. 在浏览器里构造 File 对象并设置到 input[type=file]，然后调用 el-upload 的 handleChange
+  var uploadResult = await page.evaluate(function(args) {
+    var content = args.content;
+    var fileName = args.fileName;
+
+    // 找到弹窗内的 el-upload 组件
     var dialogs = document.querySelectorAll('.el-dialog__wrapper');
+    var elUpload = null;
+    var fileInput = null;
     for (var d = 0; d < dialogs.length; d++) {
-      var fileInputs = dialogs[d].querySelectorAll('input[type="file"]');
-      if (fileInputs.length > 0) {
-        return { ok: true, found: true, count: fileInputs.length };
+      if (dialogs[d].style.display === 'none') continue;
+      var uploads = dialogs[d].querySelectorAll('.el-upload');
+      if (uploads.length > 0) {
+        elUpload = uploads[0];
+        fileInput = uploads[0].querySelector('input[type="file"]');
+        break;
       }
     }
-    return { ok: true, found: false };
-  }).then(async function(res) {
-    if (!res.found) {
-      return { ok: false, error: '未找到 input[type=file]' };
+    if (!elUpload) return { ok: false, error: '弹窗内未找到 .el-upload' };
+    if (!fileInput) return { ok: false, error: 'el-upload 内未找到 input[type=file]' };
+
+    // 把字符串内容编码成 Uint8Array + 构造 File 对象
+    var encoder = new TextEncoder();
+    var uint8 = encoder.encode(content);
+    var file = new File([uint8], fileName, { type: 'application/pdf' });
+
+    // 方法1：用 DataTransfer 设置到 input.files
+    var dt = new DataTransfer();
+    dt.items.add(file);
+    fileInput.files = dt.files;
+
+    // 方法2：通过 Vue 实例直接调用 el-upload 的 handleChange
+    // Element UI 的 handleChange(ev) 会调用 onChange → 更新 fileList → 触发 UI 重渲染
+    // 比 dispatchEvent('change') 更可靠，因为 synthetic event 有时被 Element UI 忽略
+    var vue = elUpload.__vue__;
+    var method = 'unknown';
+    if (vue && typeof vue.handleChange === 'function') {
+      // 构造一个 fake event 对象（Element UI 的 handleChange 用 ev.target.files）
+      var fakeEvent = { target: { files: dt.files } };
+      vue.handleChange(fakeEvent);
+      method = 'vue.handleChange';
+    } else {
+      // 备选：dispatchEvent（不太可靠）
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+      method = 'dispatchEvent';
     }
-    try {
-      // dev-browser 的 page.setInputFiles 接受 filePaths
-      await page.setInputFiles(res.count > 0 ? 'input[type=file]' : null, pdfPath);
-      return { ok: true };
-    } catch (e) {
-      // 备选：在 evaluate 内查找 file input 并直接设置
-      try {
-        await page.evaluate(function(args) {
-          var pdfPath = args.pdfPath;
-          var input = document.querySelector('.el-dialog__wrapper input[type="file"]');
-          if (!input) throw new Error('file input not found');
-          var dt = new DataTransfer();
-          // 注意：QuickJS沙箱无法直接构造 File 对象；需要通过 dev-browser 的 setInputFiles
-          // 如果走到这里说明 setInputFiles 失败了
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-        }, { pdfPath: pdfPath });
-        return { ok: false, error: 'setInputFiles 失败，建议直接传入 PDF 路径字符串: ' + String(e) };
-      } catch (e2) {
-        return { ok: false, error: 'PDF 上传失败: ' + String(e) + ' / ' + String(e2) };
-      }
-    }
-  });
+
+    return {
+      ok: true,
+      fileName: fileName,
+      fileSize: uint8.length,
+      fileType: file.type,
+      method: method,
+      fileListLength: vue && vue.fileList ? vue.fileList.length : -1
+    };
+  }, { content: fileContent, fileName: fileName });
+
+  // 等 Element UI el-upload 组件更新 UI（handleChange 异步调用 onChange）
+  if (uploadResult.ok) await page.waitForTimeout(1200);
+
+  return uploadResult;
 }
 
 // ===================== 点击"确定"键（仅 confirm=true） =====================
@@ -580,6 +657,7 @@ async function main() {
   }
 
   // 15) 截图弹窗（关键证据，供人工核对）
+  await page.waitForTimeout(1500);  // 等所有 UI（el-select dropdown 关闭、el-upload 文件列表更新等）稳定
   var buf2 = await page.screenshot();
   var ss2 = await saveScreenshot(buf2, 'dialog_filled_' + orderId + '_' + Date.now() + '.png');
   log('SCREENSHOT', 'dialog filled', { path: ss2 });

@@ -164,8 +164,11 @@ cat ~/.dev-browser/tmp/interest_island_invoice_create_output.json
 | 弹窗可见性判断 | 用 `element.offsetParent` | 只检查 `style.display !== 'none'`（`.el-dialog__wrapper` 是 `position:fixed`，**fixed 元素的 offsetParent 永远是 null**）|
 | 订单ID未识别 | 用原生 DOM 操作填 input | 用 Vue 组件直驱（`input.dispatchEvent('input')` + `change`），触发后端 API 自动填充 |
 | 自动填充超时 | 填写后立即点确定 | 轮询等待"所属品类/商品名称/用户ID"三个字段从空变非空，最多 8 秒 |
-| 发票类型/抬头类型下拉 | 用 `page.locator('option').selectOption()` | el-select 是 portal 渲染的，需先点开 → 再点选项文本 |
-| PDF 上传失败 | 把 PDF 拖到对话框 | 找隐藏的 `<input type="file">`，用 `setInputFiles()` 直接设置 |
+| **el-select 不响应** | `item.click()` 在 `page.evaluate` 里调用 | **`page.mouse.click(x, y)` 真实鼠标坐标点击**（synthetic click 经常被 Element UI 忽略，需要等 dropdown 完全渲染——加 2000ms 等待 + getBoundingClientRect 重试机制避免 (0,0) 坐标）|
+| **el-upload 不更新 UI** | `input.dispatchEvent('change')` | **`elUpload.__vue__.handleChange(fakeEvent)` 直接调用 Element UI 内部处理器**（synthetic Event 不被 Element UI 接收，必须通过 Vue 实例直接调用，传入 `{ target: { files: dt.files } }`）|
+| **QuickJS 无 fs** | `page.setInputFiles(path)` | **QuickJS 沙箱无 fs 模块！** 用 `readFile` 读 PDF 文本 → `TextEncoder` 编码成 Uint8Array → `new File([uint8], name, { type })` → DataTransfer 设置到 input |
+| PDF 上传失败 | 把 PDF 拖到对话框 | 见上：用 `vue.handleChange(fakeEvent)` |
+| **Vue 响应式更新延迟** | 操作完立刻截图 | 每个 Vue 操作后等 300-1500ms（v-model.nextTick）；截图前统一等 1500ms |
 | **误提交** | 填完字段自动点确定 | **默认 confirm=false**，弹窗保持打开；只截图不提交。需显式传 confirm=true 才点 |
 | 字段类型错误 | 传入"个人"或"普通发票" | 强校验白名单："电子普通发票"/"增值税专用发票" + "个人/非企业"/"企业" |
 | Windows 路径 | `"C:\\Users\\..."` 双反斜杠 (静默崩溃) | `"C:\Users\..."` 单反斜杠 |
@@ -178,6 +181,7 @@ cat ~/.dev-browser/tmp/interest_island_invoice_create_output.json
 | 订单号 | 发票类型 | 抬头类型 | 期望行为 | 实际结果 |
 |--------|---------|---------|---------|---------|
 | `12345` (测试用假订单号) | 电子普通发票 | 个人/非企业 | 订单ID 已填写，3 个 auto-fill 字段超时未填充，安全退出 | ✅ `auto_fill_timeout`，`confirm_executed=false` |
+| `9000000785102111` (真实已开票订单) | 电子普通发票 | 个人/非企业 | 弹窗填到可提交状态：订单ID/auto-fill 3 字段/金额/发票类型/抬头类型/发票抬头/PDF fileList 全部就绪 | ✅ `filled_not_submitted`，所有字段正确填入，PDF fileListLength=1，`confirm_executed=false` |
 
 ## 安全约束（最高优先级）
 
