@@ -1,0 +1,205 @@
+---
+name: interest_island_invoice_create
+description: 兴趣岛发票新建 Skill。接收上游开票结果（订单ID、开票金额、发票类型、抬头类型、发票抬头、企业税号、PDF路径），导航到开票审核页 → 点击新建 → 填写弹窗字段。**默认只填到弹窗可提交状态，不点确定键**（防止误提交）；只有显式传入 confirm=true 才会点击确定。
+version: 1.0.0
+tier: write_with_safety_guard
+priority: high
+---
+
+# Interest Island Invoice Create
+
+兴趣岛系统新建发票记录模块。流程第 7 步：上游税务局开票完成后，把开票结果回写到兴趣岛系统的"开票审核"页面。
+
+## 工作原理
+
+复用 `dev-browser` 启动的可见浏览器实例（命名页 `interest-island`），通过 **Vue 组件直驱** + **Element UI 操作** 结合方式操作：
+
+1. **导航**：`page.goto('/finance/invoice')` 进入开票审核页
+2. **触发弹窗**：点击"批量开票"或"新建"按钮触发 `el-dialog`（Vue 会自动挂载到 body）
+3. **填写字段**：
+   - 订单ID：直接通过 Vue `input` v-model 设置，**会触发后端 API 自动填充**所属品类/商品名称/用户ID
+   - 其他字段：同样通过 Vue 组件 `input`/`change` 事件设置
+   - 发票类型/抬头类型：`el-select` 下拉，先点开 → 再点选项
+4. **上传 PDF**：找到 `<input type="file">` 元素，用 `setInputFiles()` 设置 PDF 路径
+5. **关键安全门**：默认**不点击"确定"键**，只填到弹窗可提交状态。需显式传 `confirm: true` 才会点击。
+
+## 输入参数
+
+```json
+{
+  "order_id": "9000000776180002",
+  "task_id": "INV-20260727-007",
+  "invoice_amount": "2380.00",
+  "invoice_type": "电子普通发票",
+  "title_type": "企业",
+  "invoice_title": "重庆市綦江区源聚农业旅游开发有限公司",
+  "company_tax_id": "91500222MA5U6C5Q3N",
+  "invoice_pdf_path": "C:\\Users\\EDY\\Downloads\\invoice_9000000776180002.pdf",
+  "remarks": "可选，备注最长400字",
+  "confirm": false
+}
+```
+
+### 输入字段约束
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `order_id` | ✅ | 16位订单号 |
+| `invoice_amount` | ✅ | 字符串格式，保留2位小数 |
+| `invoice_type` | ✅ | 限定值：`电子普通发票` 或 `增值税专用发票` |
+| `title_type` | ✅ | 限定值：`个人/非企业` 或 `企业` |
+| `invoice_title` | ✅ | 最多100个字符 |
+| `company_tax_id` | 条件 | `title_type=企业` 时必填，最长100字符 |
+| `invoice_pdf_path` | ✅ | PDF 绝对路径，需 ≤2000KB，application/pdf |
+| `remarks` | ❌ | 可选，备注最长400字符 |
+| `confirm` | ❌ | **默认 false**。`true` 才会真正点击确定键 |
+
+### 发票类型强校验
+
+```js
+// 仅允许以下两种
+const ALLOWED_INVOICE_TYPES = ['电子普通发票', '增值税专用发票'];
+const ALLOWED_TITLE_TYPES = ['个人/非企业', '企业'];
+```
+
+如果传入不在允许列表内的值，脚本会**立即拒绝执行**，写入 `result_status: 'invalid_input'`。
+
+### 输入写入路径
+
+调用方将参数写入：
+```
+~/.dev-browser/tmp/interest_island_invoice_create_input.json
+```
+
+## 输出
+
+脚本执行后写入：
+```
+~/.dev-browser/tmp/interest_island_invoice_create_output.json
+```
+
+### 输出 JSON Schema
+
+```typescript
+{
+  task_id: string | null,
+  order_id: string,
+  query_status: 'success' | 'login_required' | 'invalid_input' | 'page_structure_change' | 'dialog_open_failed' | 'auto_fill_timeout' | 'pdf_upload_failed' | 'safety_aborted',
+  result_status: 'filled_not_submitted' | 'submitted' | 'rejected' | 'login_required',
+  order_id_recognized: boolean | null,  // 订单ID填写后是否识别成功（auto-fill 字段已填充）
+  auto_fill: {
+    category: string | null,        // 所属品类
+    product_name: string | null,    // 商品名称
+    user_id: string | null          // 用户ID
+  } | null,
+  dialog_screenshot: string,         // 弹窗填写完成后的截图绝对路径
+  decision_reason: string,
+  safety_check: {
+    confirm_requested: boolean,     // 用户传入的 confirm 值
+    confirm_executed: boolean,      // 是否实际点击了确定键（仅 confirm=true 时才为 true）
+    pdf_uploaded: boolean
+  }
+}
+```
+
+## 调用流程
+
+### 1. 确保浏览器在线
+
+```bash
+dev-browser status
+# 应显示 interest-island 实例 running
+```
+
+### 2. 准备输入文件
+
+将参数写入 `~/.dev-browser/tmp/interest_island_invoice_create_input.json`（脚本会读取）。
+
+### 3. 运行脚本（默认安全模式，**不提交**）
+
+⚠️ **不要用 heredoc**（JS 中的单引号会破坏 bash 解析），**不要用双反斜杠路径**（会静默崩溃）。
+
+```bash
+dev-browser --browser interest-island --idle-timeout 0 --timeout 120 run "C:\Users\EDY\WorkBuddy\2026-07-27-10-31-48\interest_island_invoice_checker\skills\invoice-create\automation\interest_island_invoice_create.js"
+```
+
+### 4. 检查输出
+
+```bash
+cat ~/.dev-browser/tmp/interest_island_invoice_create_output.json
+```
+
+### 5. 确认无误后再真实提交
+
+**只有人工核对弹窗无误后**，才能用 `confirm: true` 重新运行：
+
+```json
+{
+  ...其他字段,
+  "confirm": true
+}
+```
+
+## 运行时约束
+
+脚本运行在 **QuickJS WASM 沙箱** 中，不是 Node.js：
+
+| 不可用 | 替代方案 |
+|--------|---------|
+| `require('fs')` | 内置 `await readFile(name)` / `await writeFile(name, data)` |
+| `require('os')` | 不可用，路径硬编码或省略 |
+| `require()` 整体 | QuickJS 无模块加载 |
+| `let`/`const` (部分版本) | 用 `var` 更安全 |
+| 箭头函数 (page.evaluate 内) | 用 `function` 声明更安全 |
+| Node.js `path` 模块 | 不可用，路径用字符串拼接 |
+
+文件 I/O 路径自动限制在 `~/.dev-browser/tmp/`。
+
+## 关键踩坑记录
+
+| 问题 | 错误做法 | 正确做法 |
+|------|---------|---------|
+| 订单ID未识别 | 用原生 DOM 操作填 input | 用 Vue 组件直驱（`input.dispatchEvent('input')` + `change`），触发后端 API 自动填充 |
+| 自动填充超时 | 填写后立即点确定 | 轮询等待"所属品类/商品名称/用户ID"三个字段从空变非空，最多 8 秒 |
+| 发票类型/抬头类型下拉 | 用 `page.locator('option').selectOption()` | el-select 是 portal 渲染的，需先点开 → 再点选项文本 |
+| PDF 上传失败 | 把 PDF 拖到对话框 | 找隐藏的 `<input type="file">`，用 `setInputFiles()` 直接设置 |
+| **误提交** | 填完字段自动点确定 | **默认 confirm=false**，弹窗保持打开；只截图不提交。需显式传 confirm=true 才点 |
+| 字段类型错误 | 传入"个人"或"普通发票" | 强校验白名单："电子普通发票"/"增值税专用发票" + "个人/非企业"/"企业" |
+| Windows 路径 | `"C:\\Users\\..."` 双反斜杠 (静默崩溃) | `"C:\Users\..."` 单反斜杠 |
+| PDF >2000KB | 不检查大小 | 上传前用 `getFileSize()`（QuickJS 内置）检查，超限立即拒绝 |
+
+## 已验证测试场景
+
+> 测试模式（confirm=false），只填到弹窗可提交状态，不点确定。
+
+| 订单号 | 发票类型 | 抬头类型 | 状态 |
+|--------|---------|---------|------|
+| （待测试） | | | |
+
+## 安全约束（最高优先级）
+
+1. **🚨 默认 confirm=false**：脚本默认只填到弹窗可提交状态，**严禁**点击"确定"键
+2. **强校验**：发票类型、抬头类型不在白名单内立即拒绝（`invalid_input`）
+3. **PDF 大小检查**：>2000KB 拒绝上传
+4. **订单ID 自动填充校验**：填了订单ID 后必须等到 3 个 auto-fill 字段全部非空，否则不继续
+5. **截图证据**：弹窗填写完成后必须截图（`dialog_screenshot`），供人工核对
+6. **提交审计**：只有 `confirm=true` 才执行 `确定键.click()`，且在 output 里记录 `safety_check.confirm_executed=true`
+
+## 已知限制
+
+- 仅支持正式营订单的"开票审核"页面（`/finance/invoice`）
+- 依赖 Vue 组件结构稳定，兴趣岛改版时可能需要调整弹窗字段定位
+- PDF 上传依赖后端 API，偶发上传失败需重试
+- 弹窗内"备注"字段未在本 skill 中处理（如需填写请扩展）
+
+## 文件结构
+
+```
+invoice-create/
+├── SKILL.md                                    ← 本文件
+├── automation/
+│   └── interest_island_invoice_create.js      ← 主流程脚本 (QuickJS)
+└── config/
+    ├── settings.json                           ← URL、超时、PDF限制等配置
+    └── selectors.json                          ← 弹窗字段定位 + 下拉选项
+```
