@@ -38,6 +38,8 @@ agent_created: true
 
 ## 执行流程（3步）
 
+> 📣 **进度反馈约定**：所有 dev-browser 脚本必须用 `console.log("[步骤 n/N] ...")` 打印分步进度，让用户实时看到「打开文档 → 等引擎就绪 → 等 Sheet 就绪 → 遍历查询 → 完成」，避免干等无反馈。规范化脚本 `scripts/wecom_invoice_query.js` 已内置。
+
 ### 第1步：dev-browser打开企微文档并确认登录
 
 ```bash
@@ -77,45 +79,33 @@ EOF
   ```
   用 Read 读截图，提示用户在弹出的浏览器窗口扫码。用户说"登录好了"后重新执行此步确认。
 
-### 第2步：引擎API查询订单号
+### 第2步：引擎API查询订单号（用规范化脚本，带分步进度）
+
+> ⚠️ **不要手写内联脚本直接调 `getSheetBySheetId`** —— 必须先等 **Sheet 数据就绪**（`workbook` 存在 ≠ `sheet` 数据就绪，否则 `getSheetBySheetId` 返回 `undefined` 报错）。规范化脚本已内置这个等待。
+
+准备输入文件 `~/.dev-browser/tmp/wecom_query_input.json`：
+
+```json
+{ "order_num": "9000000784169034" }
+```
+
+运行规范化脚本（实时打印分步日志 + 最终 JSON 到 `wecom_query_output.json`）：
 
 ```bash
-dev-browser --browser wecom --idle-timeout 30m --timeout 90 <<'EOF'
-const page = await browser.getPage("wecom-doc");
+dev-browser --browser wecom --idle-timeout 30m --timeout 90 run "scripts/wecom_invoice_query.js"
+```
 
-// 查询订单号（从上游任务输入）
-const orderNum = "<订单号>";
+脚本会打印类似下面的分步进度，每一步都可见：
 
-const result = await page.evaluate((num) => {
-  const app = window.SpreadsheetApp;
-  const sheet = app.workbook.worksheetManager.getSheetBySheetId(app.workbook.worksheetManager.activeSheetId);
-  
-  // 遍历所有行的"订单ID"列(col 9)，检查是否包含订单号
-  for (let r = 1; r < sheet.getRowCount(); r++) {
-    const cell = sheet.getCellDataAtPosition(r, 9);
-    const val = cell && cell.formattedValue ? cell.formattedValue.value : '';
-    if (val && val.includes(num)) {
-      // 找到，读取该行的开票信息
-      const dateCell = sheet.getCellDataAtPosition(r, 2);
-      const invoiceNumCell = sheet.getCellDataAtPosition(r, 4);
-      const nameCell = sheet.getCellDataAtPosition(r, 6);
-      const amountCell = sheet.getCellDataAtPosition(r, 8);
-      return {
-        found: true,
-        row: r,
-        orderField: val,
-        date: dateCell && dateCell.formattedValue ? dateCell.formattedValue.value : '',
-        invoiceNumber: invoiceNumCell && invoiceNumCell.formattedValue ? invoiceNumCell.formattedValue.value : '',
-        name: nameCell && nameCell.formattedValue ? nameCell.formattedValue.value : '',
-        amount: amountCell && amountCell.formattedValue ? amountCell.formattedValue.value : '',
-      };
-    }
-  }
-  return { found: false };
-}, orderNum);
-
-console.log(JSON.stringify(result, null, 2));
-EOF
+```
+[步骤 1/5] 打开企微文档 https://doc.weixin.qq.com/sheet/...
+[步骤 2/5] 等待 SpreadsheetApp 引擎就绪（轮询 workbook）...
+  ✓ 引擎就绪，用时 3200ms
+[步骤 3/5] 等待 Sheet 数据就绪（getRowCount 可用）...
+  ✓ Sheet 就绪，用时 1500ms
+[步骤 4/5] 遍历订单ID列查询订单号 9000000784169034 ...
+[步骤 5/5] 查询完成，写出结果
+{ "found": false }
 ```
 
 ### 第3步：输出结果

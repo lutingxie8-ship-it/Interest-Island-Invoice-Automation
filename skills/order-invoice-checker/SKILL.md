@@ -10,6 +10,8 @@ priority: high
 
 兴趣岛订单开票核验模块。核验订单的存在、状态（已支付/否）和是否已经开过发票，输出结构化 JSON。
 
+> 📣 **进度反馈约定**：脚本通过 `log()` 输出 `[ISLAND][时间戳] STAGE: 信息` 分步日志（LOGIN / INPUT / PAGE / QUERY / STATE / DETAIL / PANEL / SCROLL / ANALYSIS / OUTPUT / DONE），每一步都可实时看到，无需干等。运行时请观察终端日志。
+
 ## 工作原理
 
 复用 `dev-browser` 启动的可见浏览器实例（命名页 `interest-island`），通过 **Vue 组件直驱** 方式操作：直接修改 Vue 组件的 `listQuery` 数据并调用 `fetchData()` 触发 API 查询，完全绕过不可靠的 DOM 操作。查询到订单后点击"详情"，从详情面板（`document.body.innerText`）提取字段和"发票信息" section。
