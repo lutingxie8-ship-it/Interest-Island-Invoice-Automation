@@ -16,10 +16,11 @@ function step(n, total, msg) {
   console.log(`[步骤 ${n}/${total}] ${msg}`);
 }
 
-// ---- 读取输入 ----
+// ---- 读取输入（readFile 是异步的，必须 await）----
 let orderNum = null;
 try {
-  const cfg = JSON.parse(readFile(INPUT_PATH));
+  const raw = await readFile(INPUT_PATH);
+  const cfg = JSON.parse(raw);
   orderNum = cfg.order_num || cfg.orderNum || cfg.order_id || null;
 } catch (e) {
   console.log(JSON.stringify({ error: "input_read_failed", detail: String(e) }));
