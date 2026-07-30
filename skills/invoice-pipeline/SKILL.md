@@ -175,6 +175,22 @@ agent_created: true
 
 ---
 
+## 性能优化（执行时务必遵守）
+
+编排层最浪费时间的不是逻辑本身，是浏览器/SPA 启动 + 盲等 + 重复扫描。以下是已落地的提速点：
+
+1. **阶段 1 与阶段 2 可并行**：`wecom-invoice-query`（步骤4）跑在 `wecom` 命名浏览器实例，`order-invoice-checker`（步骤5）跑在 `interest-island` 命名浏览器实例——**两个独立进程、互不抢占**。单条订单的查重与核验可同时发起（两个后台 `dev-browser` 任务并行），整体耗时从"两者相加"降到"取大值"。批量订单时同样可并行。**这是编排层最大的提速点**，执行时不要串行等完一个再跑下一个。
+
+2. **子 skill 已修复 `main().then()` 异步截断**：`order-invoice-checker` / `invoice-create` 的运行入口已统一改为顶层 `await main()`，避免 QuickJS 沙箱里 `main().then()` 被脚本退出截断、只打印 `START` 就死的坑（曾经导致"跑死→改→重跑"白费一轮）。
+
+3. **wecom 子 skill 已把盲等改条件轮询**：`wecom-invoice-query` / `wecom-invoice-import` 打开/刷新企微文档时改用 `waitForAppReady()` 轮询 `SpreadsheetApp.workbook`，就绪即返回（通常 3-5s），不再固定 `waitForTimeout(12000)` 盲等，每次省 7-9s。
+
+4. **wecom 子 skill 已落实"全表只扫一次"**：重复检查、抽查、全量取号合并为一次 `evaluate`，结果复用，不再对 5000+ 行表反复扫描。
+
+5. **复用命名页，不要重复 goto**：`wecom-doc` / `interest-island` 命名页全程保持打开，阶段间直接 `getPage` 拿同一页面，不要每步重新加载。
+
+---
+
 ## 注意事项
 
 1. **安全门优先**：invoice-create 的 `confirm` 永远默认 false，除非用户显式说「可以提交了」

@@ -387,9 +387,11 @@ async function main() {
   return result;
 }
 
-// 运行
-main().then(function(r) {
-  log('DONE', 'script complete', { can_invoice: r.can_invoice });
-}).catch(function(e) {
+// 运行（⚠️ QuickJS 沙箱必须用顶层 await，main().then() 会被脚本退出截断，
+//    导致脚本只打印 START 就退出，output 文件根本写不出来——参见踩坑记录）
+try {
+  var r = await main();
+  log('DONE', 'script complete', { can_invoice: r && r.can_invoice });
+} catch (e) {
   log('FATAL', 'unhandled error', { message: String(e), stack: e && e.stack ? String(e.stack) : 'none' });
-});
+}

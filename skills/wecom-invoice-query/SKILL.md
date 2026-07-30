@@ -44,18 +44,33 @@ agent_created: true
 dev-browser --browser wecom --idle-timeout 30m --timeout 120 <<'EOF'
 const page = await browser.getPage("wecom-doc");
 await page.goto("<文档链接>", { waitUntil: "domcontentloaded" });
-await page.waitForTimeout(12000);
-const ready = await page.evaluate(() => ({
-  hasApp: typeof window.SpreadsheetApp !== 'undefined',
-  hasWorkbook: window.SpreadsheetApp && !!window.SpreadsheetApp.workbook,
-  title: document.title,
-}));
+
+// 等待引擎就绪：轮询 SpreadsheetApp.workbook，就绪即返回。
+// ⚠️ 不要用固定 waitForTimeout(12000)——那是盲等，引擎通常 3-5s 就绪，盲等白等 7-9s。
+async function waitForAppReady(timeoutMs) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const ok = await page.evaluate(() =>
+      typeof window.SpreadsheetApp !== 'undefined'
+      && window.SpreadsheetApp
+      && !!window.SpreadsheetApp.workbook
+      && !!window.SpreadsheetApp.workbook.worksheetManager
+    );
+    if (ok) return { ok: true, elapsed: Date.now() - start };
+    await page.waitForTimeout(300);
+  }
+  return { ok: false, elapsed: timeoutMs };
+}
+const appReady = await waitForAppReady(20000);
+const ready = appReady.ok
+  ? await page.evaluate(() => ({ hasApp: true, hasWorkbook: true, title: document.title, elapsed_ms: appReady.elapsed }))
+  : { hasApp: false, hasWorkbook: false, title: document.title, timeout: true, elapsed_ms: appReady.elapsed };
 console.log(JSON.stringify(ready));
 EOF
 ```
 
 - `hasApp: true` → 已登录，继续第2步
-- `hasApp: false` 或 title 含"登录" → 需扫码，截图给用户：
+- `hasApp: false` 或 `timeout: true` 或 title 含"登录" → 需扫码，截图给用户：
   ```js
   const buf = await page.screenshot();
   const path = await saveScreenshot(buf, "login.png");

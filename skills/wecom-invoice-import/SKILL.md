@@ -65,18 +65,33 @@ TSV每行一条记录，列用`\t`分隔。将输出保存到临时文件供后�
 dev-browser --browser wecom --idle-timeout 30m --timeout 120 <<'EOF'
 const page = await browser.getPage("wecom-doc");
 await page.goto("<文档链接>", { waitUntil: "domcontentloaded" });
-await page.waitForTimeout(10000);
-const ready = await page.evaluate(() => ({
-  hasApp: typeof window.SpreadsheetApp !== 'undefined',
-  hasWorkbook: window.SpreadsheetApp && !!window.SpreadsheetApp.workbook,
-  title: document.title,
-}));
+
+// 等待引擎就绪：轮询 SpreadsheetApp.workbook，就绪即返回。
+// ⚠️ 不要用固定 waitForTimeout(10000)——那是盲等，引擎通常 3-5s 就绪，盲等白等 5-7s。
+async function waitForAppReady(timeoutMs) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const ok = await page.evaluate(() =>
+      typeof window.SpreadsheetApp !== 'undefined'
+      && window.SpreadsheetApp
+      && !!window.SpreadsheetApp.workbook
+      && !!window.SpreadsheetApp.worksheetManager
+    );
+    if (ok) return { ok: true, elapsed: Date.now() - start };
+    await page.waitForTimeout(300);
+  }
+  return { ok: false, elapsed: timeoutMs };
+}
+const appReady = await waitForAppReady(20000);
+const ready = appReady.ok
+  ? await page.evaluate(() => ({ hasApp: true, hasWorkbook: true, title: document.title, elapsed_ms: appReady.elapsed }))
+  : { hasApp: false, hasWorkbook: false, title: document.title, timeout: true, elapsed_ms: appReady.elapsed };
 console.log(JSON.stringify(ready));
 EOF
 ```
 
 - `hasApp: true` → 已登录，继续第3步
-- `hasApp: false` 或 title 含"登录" → 需扫码，截图给用户：
+- `hasApp: false` 或 `timeout: true` 或 title 含"登录" → 需扫码，截图给用户：
   ```js
   const buf = await page.screenshot();
   const path = await saveScreenshot(buf, "login.png");
@@ -239,7 +254,23 @@ EOF
 dev-browser --browser wecom --idle-timeout 30m --timeout 120 <<'EOF'
 const page = await browser.getPage("wecom-doc");
 await page.goto("<文档链接>", { waitUntil: "domcontentloaded" });
-await page.waitForTimeout(12000);
+
+// 刷新后轮询引擎就绪（替代固定 waitForTimeout(12000)，通常 3-5s）
+async function waitForAppReady(timeoutMs) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const ok = await page.evaluate(() =>
+      typeof window.SpreadsheetApp !== 'undefined'
+      && window.SpreadsheetApp
+      && !!window.SpreadsheetApp.workbook
+      && !!window.SpreadsheetApp.workbook.worksheetManager
+    );
+    if (ok) return { ok: true, elapsed: Date.now() - start };
+    await page.waitForTimeout(300);
+  }
+  return { ok: false, elapsed: timeoutMs };
+}
+await waitForAppReady(20000);
 
 // 读回写入的行范围，确认数据还在
 const readBack = await page.evaluate(() => {
@@ -264,6 +295,20 @@ EOF
 5. **必须刷新验证**：只有刷新后数据还在，才确认提交到服务器。setCellDataAtPosition只改内存刷新即丢。
 
 6. **引擎行号 vs UI行号**：引擎row 0 = UI row 1（表头），引擎row N = UI row N+1。导航和验证时注意换算。
+
+## 性能优化（执行时务必遵守）
+
+文档有 5000+ 行，每次 `getCellDataAtPosition` 全表遍历都要花几秒。以下是踩坑总结的提速规则：
+
+1. **轮询而非盲等**：所有"等引擎就绪"用 `waitForAppReady()` 轮询 `SpreadsheetApp.workbook`，就绪即返回（通常 3-5s），**不要用固定 `waitForTimeout(10000/12000)` 盲等**——那是本 skill 早期最浪费时间的写法，每次白等 5-9s。第2/6步已改。
+
+2. **全表只扫一次，结果复用**：重复检查（第3步）那次 `evaluate` 已经把所有行的 `date`+`num` 拉回来了。后续要抽查字段是否一致、或找最近日期，**直接用这次结果数组，不要再发新的 `evaluate` 扫表**。实测中"重复检查扫一遍、抽查又扫一遍、全量取号又扫一遍"会叠加成 3 倍耗时。
+
+3. **合并 dev-browser 调用**：第2-6步每步一个独立 `dev-browser ... <<EOF` 进程，每次都有进程拉起 + getPage 开销。能合并就合并——把"打开+重复检查+导航+粘贴+刷新验证"写进**同一个 heredoc**，省掉 3-4 次进程拉起。命名页 `wecom-doc` 全程保持打开，`getPage` 拿到同一页面，状态连续。
+
+4. **复用已开页面，不要重复 goto**：命名页一旦打开，后续直接 `getPage("wecom-doc")` 拿同一页面，**不要每步都 `page.goto(文档链接)` 重新加载**。只有第6步验证持久化需要刷新（goto 一次）。
+
+5. **批量查重走"先全读后内存比对"**：单条查询可在遍历时命中即返回；批量（多条发票号）时，先一次 `evaluate` 把订单ID列全读进数组，再内存 `.some()` 比对——比"每条扫一遍表"快 N 倍。参见 wecom-invoice-query 的批量查询写法。
 
 ## 故障排查
 
