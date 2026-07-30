@@ -82,7 +82,7 @@ agent_created: true
 
 用户返回开好的发票 PDF 后，对每条记录调用 `invoice-create` skill：
 
-- 传入：订单号、开票金额、发票类型、抬头类型、发票抬头、企业税号（企业才有）、发票 PDF 路径
+- 传入：订单号、开票金额、发票类型、抬头类型、发票抬头、企业税号（企业才有）、**`invoice_pdf_base64`（PDF 文件需先 base64 编码，沙箱无法读磁盘二进制）** 与可选的 `invoice_pdf_name`
 - **⚠️ 安全门**：`confirm` 默认 `false`，只填不提交。需用户**显式确认**「可以点确定了」才传 `confirm=true`
 - 输出：填好的截图 + `confirm_executed` 状态
 
@@ -156,7 +156,7 @@ agent_created: true
 | 1 | wecom-invoice-query | 订单号 | 找到/找不到 |
 | 2 | order-invoice-checker | 订单号 | 已开票/未开票/需人工 |
 | 3 | （本编排渲染） | 通过核验的记录 | 开票信息卡 |
-| 4 | invoice-create | 订单号+字段+PDF路径 | 填好截图+confirm状态 |
+| 4 | invoice-create | 订单号+字段+PDF的base64 | 填好截图+confirm状态 |
 | 5 | wecom-invoice-import | 开票记录 | 录入成功/失败 |
 
 子 skill 各自独立可用，本编排只是按序调用 + 传参 + 断点控制。

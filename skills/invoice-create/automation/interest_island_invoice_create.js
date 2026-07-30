@@ -8,7 +8,7 @@
  *   3. 点击"批量开票"按钮 → 等待 el-dialog 弹出
  *   4. 填写订单ID → 轮询等待 3 个 auto-fill 字段（所属品类/商品名称/用户ID）
  *   5. 填写开票金额 + 发票类型 + 抬头类型 + 发票抬头 + 企业税号
- *   6. 上传 PDF（先检查文件存在性）
+ *   6. 上传 PDF（调用方 base64 编码后由 invoice_pdf_base64 传入，沙箱内 atob 还原）
  *   7. 截图弹窗（关键证据）
  *   8. ⚠️ 默认不点确定键！只有 confirm=true 才执行提交
  *
@@ -19,9 +19,9 @@
  *
  * 关键技术点：
  *   - el-select 是 portal 渲染：先点开 → 等 dropdown → 点击 item
- *   - el-upload 文件上传：找 input[type=file]，用 setInputFiles
+ *   - el-upload 文件上传：base64 → atob → File → DataTransfer → Vue handleChange（绕开沙箱 fs/utf8 限制）
  *   - 订单ID自动填充：填值后轮询 3 个 readonly 字段
- *   - QuickJS 无 fs/path，用内置 readFile/writeFile，路径自动指向 ~/.dev-browser/tmp/
+ *   - QuickJS 无 fs/path，PDF 二进制无法读盘；改用调用方 base64 传入 invoice_pdf_base64
  */
 
 // ===================== 常量 =====================
@@ -50,7 +50,7 @@ async function loadAndValidateInput() {
   log('INPUT', 'received', input);
 
   // 必填字段检查
-  var required = ['order_id', 'invoice_amount', 'invoice_type', 'title_type', 'invoice_title', 'invoice_pdf_path'];
+  var required = ['order_id', 'invoice_amount', 'invoice_type', 'title_type', 'invoice_title', 'invoice_pdf_base64'];
   for (var i = 0; i < required.length; i++) {
     var f = required[i];
     if (!input[f] || String(input[f]).trim() === '') {
@@ -103,11 +103,19 @@ async function loadAndValidateInput() {
     };
   }
 
-  // 强校验：PDF 文件后缀
-  if (!/\.pdf$/i.test(input.invoice_pdf_path)) {
+  // 强校验：PDF base64 必填 + 文件名后缀
+  if (!input.invoice_pdf_base64 || String(input.invoice_pdf_base64).trim() === '') {
     return {
       ok: false, error: 'invalid_input',
-      reason: 'PDF 路径必须以 .pdf 结尾: ' + input.invoice_pdf_path,
+      reason: 'invoice_pdf_base64 必填（PDF 二进制需 base64 编码后传入，沙箱无法读取磁盘文件）',
+      input: input
+    };
+  }
+  var pdfName = input.invoice_pdf_name || 'invoice.pdf';
+  if (!/\.pdf$/i.test(pdfName)) {
+    return {
+      ok: false, error: 'invalid_input',
+      reason: 'invoice_pdf_name 必须以 .pdf 结尾: ' + pdfName,
       input: input
     };
   }
@@ -356,90 +364,101 @@ async function selectElSelectOption(page, labelText, optionText) {
 }
 
 // ===================== 上传 PDF =====================
-// QuickJS 沙箱没有 fs 模块，page.setInputFiles 不可用
-// 方案：readFile 读取 PDF 内容 → 传给 page.evaluate → 在浏览器里用 DataTransfer + File 构造文件 → 设置到 input[type=file]
-async function uploadPdf(page, pdfPath) {
-  // 1. 从路径提取文件名
-  var fileName = 'invoice.pdf';
-  var lastSlash = Math.max(pdfPath.lastIndexOf('/'), pdfPath.lastIndexOf('\\'));
-  if (lastSlash >= 0) fileName = pdfPath.substring(lastSlash + 1);
+// ⚠️ 二进制安全上传：沙箱无 fs、readFile 仅支持 utf8 且限 temp 目录，
+// 无法把磁盘上的 PDF 读成二进制。改为调用方把 PDF base64 编码后通过
+// invoice_pdf_base64 传入；沙箱内 page.evaluate 用浏览器 atob 还原为
+// Uint8Array → new File → DataTransfer 设置到 <input type=file>，
+// 再驱动 el-upload 的 __vue__.handleChange，避免依赖 setInputFiles 的
+// 路径模式（会触发被禁用的 platform.fs）。
+async function uploadPdf(page, pdfBase64, pdfName) {
+  // 入参校验
+  if (!pdfBase64 || String(pdfBase64).trim() === '') {
+    return { ok: false, error: 'invoice_pdf_base64 为空，无法上传' };
+  }
+  var name = (pdfName && String(pdfName).trim()) ? String(pdfName).trim() : 'invoice.pdf';
+  if (!/\.pdf$/i.test(name)) name = name + '.pdf';
+  var b64 = String(pdfBase64).trim();
+  // 兼容 Data URI（data:application/pdf;base64,xxxx）
+  if (b64.indexOf(',') >= 0) b64 = b64.substring(b64.indexOf(',') + 1);
+  log('UPLOAD_PDF', 'prepared', { name: name, b64Len: b64.length });
 
-  // 2. 用 QuickJS readFile 读取文件内容
-  var fileContent;
-  try {
-    // readFile 路径自动指向 ~/.dev-browser/tmp/，需要用相对路径
-    // 如果 pdfPath 是绝对路径，需要提取文件名
-    var tmpFileName = fileName;
-    if (pdfPath.indexOf('.dev-browser') >= 0 || pdfPath.indexOf('tmp/') >= 0) {
-      tmpFileName = lastSlash >= 0 ? pdfPath.substring(lastSlash + 1) : pdfPath;
-    }
-    fileContent = await readFile(tmpFileName);
-    log('UPLOAD_PDF', 'readFile done', { fileName: tmpFileName, contentLength: fileContent.length });
-  } catch (e) {
-    return { ok: false, error: 'readFile 读取 PDF 失败: ' + String(e) + '（路径: ' + pdfPath + '）' };
+  // 定位弹窗内 el-upload 的隐藏 file input
+  var selector = '.el-dialog__wrapper:not([style*="display: none"]) .el-upload input[type="file"]';
+  var hasInput = await page.evaluate(function(sel) {
+    return document.querySelectorAll(sel).length > 0;
+  }, selector);
+  if (!hasInput) {
+    return { ok: false, error: '弹窗内未找到 .el-upload input[type=file]' };
   }
 
-  // 3. 在浏览器里构造 File 对象并设置到 input[type=file]，然后调用 el-upload 的 handleChange
-  var uploadResult = await page.evaluate(function(args) {
-    var content = args.content;
-    var fileName = args.fileName;
-
-    // 找到弹窗内的 el-upload 组件
-    var dialogs = document.querySelectorAll('.el-dialog__wrapper');
-    var elUpload = null;
-    var fileInput = null;
-    for (var d = 0; d < dialogs.length; d++) {
-      if (dialogs[d].style.display === 'none') continue;
-      var uploads = dialogs[d].querySelectorAll('.el-upload');
-      if (uploads.length > 0) {
-        elUpload = uploads[0];
-        fileInput = uploads[0].querySelector('input[type="file"]');
-        break;
+  // ★ 二进制安全上传（base64 → 浏览器 atob → File → DataTransfer → handleChange）
+  // 全程不依赖 setInputFiles 的路径模式（会触发被禁用的 platform.fs），也不依赖沙箱 utf8 readFile
+  var setRes = await page.evaluate(function(args) {
+    try {
+      var sel = args.sel;
+      var name = args.name;
+      var b64 = args.b64;
+      // 浏览器标准 atob 解码 base64 → 二进制字符串
+      var bin = atob(b64);
+      var len = bin.length;
+      var bytes = new Uint8Array(len);
+      for (var i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+      var file = new File([bytes], name, { type: 'application/pdf' });
+      // 用 DataTransfer 构造 FileList（模拟真实用户选择文件）
+      var dt = new DataTransfer();
+      dt.items.add(file);
+      var input = document.querySelector(sel);
+      if (!input) return { ok: false, error: 'input 丢失' };
+      // 尝试直接赋值 input.files（部分浏览器 只读属性 抛错，忽略）
+      try { input.files = dt.files; } catch (e) {}
+      // 直接驱动 Element UI el-upload 的 handleChange（synthetic Event 不被接收，必须调 Vue 内部方法）
+      var uploads = input.closest('.el-upload');
+      var vue = uploads && uploads.__vue__;
+      if (vue && typeof vue.handleChange === 'function') {
+        vue.handleChange({ target: { files: dt.files } });
+      } else {
+        var ev = new Event('change', { bubbles: true });
+        Object.defineProperty(ev, 'target', { value: { files: dt.files } });
+        input.dispatchEvent(ev);
       }
+      return { ok: true, fileName: file.name, fileSize: file.size };
+    } catch (e) {
+      return { ok: false, error: 'evaluate 上传失败: ' + String(e) };
     }
-    if (!elUpload) return { ok: false, error: '弹窗内未找到 .el-upload' };
-    if (!fileInput) return { ok: false, error: 'el-upload 内未找到 input[type=file]' };
+  }, { sel: selector, name: name, b64: b64 });
 
-    // 把字符串内容编码成 Uint8Array + 构造 File 对象
-    var encoder = new TextEncoder();
-    var uint8 = encoder.encode(content);
-    var file = new File([uint8], fileName, { type: 'application/pdf' });
+  if (!setRes.ok) return setRes;
 
-    // 方法1：用 DataTransfer 设置到 input.files
-    var dt = new DataTransfer();
-    dt.items.add(file);
-    fileInput.files = dt.files;
+  // 等 el-upload 组件异步处理（onChange → fileList → UI 重渲染）
+  await page.waitForTimeout(1200);
 
-    // 方法2：通过 Vue 实例直接调用 el-upload 的 handleChange
-    // Element UI 的 handleChange(ev) 会调用 onChange → 更新 fileList → 触发 UI 重渲染
-    // 比 dispatchEvent('change') 更可靠，因为 synthetic event 有时被 Element UI 忽略
-    var vue = elUpload.__vue__;
-    var method = 'unknown';
-    if (vue && typeof vue.handleChange === 'function') {
-      // 构造一个 fake event 对象（Element UI 的 handleChange 用 ev.target.files）
-      var fakeEvent = { target: { files: dt.files } };
-      vue.handleChange(fakeEvent);
-      method = 'vue.handleChange';
-    } else {
-      // 备选：dispatchEvent（不太可靠）
-      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-      method = 'dispatchEvent';
-    }
-
+  // 校验文件确实挂载到 input.files 且 el-upload fileList 已更新（字节完整）
+  var check = await page.evaluate(function(sel) {
+    var input = document.querySelector(sel);
+    if (!input) return { ok: false, error: 'input 丢失' };
+    var uploads = input.closest('.el-upload');
+    var vue = uploads && uploads.__vue__;
+    var f = input.files && input.files.length ? input.files[0] : null;
     return {
       ok: true,
-      fileName: fileName,
-      fileSize: uint8.length,
-      fileType: file.type,
-      method: method,
+      filesLength: input.files ? input.files.length : 0,
+      fileName: f ? f.name : '',
+      fileSize: f ? f.size : 0,
       fileListLength: vue && vue.fileList ? vue.fileList.length : -1
     };
-  }, { content: fileContent, fileName: fileName });
+  }, selector);
 
-  // 等 Element UI el-upload 组件更新 UI（handleChange 异步调用 onChange）
-  if (uploadResult.ok) await page.waitForTimeout(1200);
+  if (!check.ok || check.filesLength === 0) {
+    return { ok: false, error: 'PDF 未成功挂载到 input.files: ' + JSON.stringify(check) };
+  }
 
-  return uploadResult;
+  return {
+    ok: true,
+    method: 'base64 -> atob -> File -> DataTransfer -> handleChange (binary-safe)',
+    fileName: check.fileName,
+    fileSize: check.fileSize,
+    fileListLength: check.fileListLength
+  };
 }
 
 // ===================== 点击"确定"键（仅 confirm=true） =====================
@@ -642,8 +661,8 @@ async function main() {
     }
   }
 
-  // 14) 上传 PDF
-  var uploadRes = await uploadPdf(page, input.invoice_pdf_path);
+  // 14) 上传 PDF（invoice_pdf_base64 由调用方 base64 编码传入；invoice_pdf_name 可选）
+  var uploadRes = await uploadPdf(page, input.invoice_pdf_base64, input.invoice_pdf_name);
   log('UPLOAD_PDF', 'result', uploadRes);
   if (!uploadRes.ok) {
     await writeFile('interest_island_invoice_create_output.json', JSON.stringify({

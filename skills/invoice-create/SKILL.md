@@ -20,7 +20,7 @@ priority: high
    - 订单ID：直接通过 Vue `input` v-model 设置，**会触发后端 API 自动填充**所属品类/商品名称/用户ID
    - 其他字段：同样通过 Vue 组件 `input`/`change` 事件设置
    - 发票类型/抬头类型：`el-select` 下拉，先点开 → 再点选项
-4. **上传 PDF**：找到 `<input type="file">` 元素，用 `setInputFiles()` 设置 PDF 路径
+4. **上传 PDF**：调用方把 PDF 文件 base64 编码后通过 `invoice_pdf_base64` 传入；脚本在浏览器内 `atob` 还原为 `File` → `DataTransfer` → 驱动 `el-upload` 的 `handleChange`（绕开沙箱 `fs` 禁用与 `readFile` 仅 utf8 的限制）
 5. **关键安全门**：默认**不点击"确定"键**，只填到弹窗可提交状态。需显式传 `confirm: true` 才会点击。
 
 ## 输入参数
@@ -34,7 +34,8 @@ priority: high
   "title_type": "企业",
   "invoice_title": "重庆市綦江区源聚农业旅游开发有限公司",
   "company_tax_id": "91500222MA5U6C5Q3N",
-  "invoice_pdf_path": "C:\\Users\\EDY\\Downloads\\invoice_9000000776180002.pdf",
+  "invoice_pdf_base64": "<PDF 的 base64 字符串，由调用方读取文件后编码传入>",
+  "invoice_pdf_name": "invoice_9000000776180002.pdf",
   "remarks": "可选，备注最长400字",
   "confirm": false
 }
@@ -50,7 +51,8 @@ priority: high
 | `title_type` | ✅ | 限定值：`个人/非企业` 或 `企业` |
 | `invoice_title` | ✅ | 最多100个字符 |
 | `company_tax_id` | 条件 | `title_type=企业` 时必填，最长100字符 |
-| `invoice_pdf_path` | ✅ | PDF 绝对路径，需 ≤2000KB，application/pdf |
+| `invoice_pdf_base64` | ✅ | PDF 二进制经 base64 编码后的字符串（调用方编码传入，沙箱无法读磁盘文件） |
+| `invoice_pdf_name` | ❌ | 可选，PDF 文件名（含 .pdf 后缀），默认 `invoice.pdf` |
 | `remarks` | ❌ | 可选，备注最长400字符 |
 | `confirm` | ❌ | **默认 false**。`true` 才会真正点击确定键 |
 
@@ -166,13 +168,13 @@ cat ~/.dev-browser/tmp/interest_island_invoice_create_output.json
 | 自动填充超时 | 填写后立即点确定 | 轮询等待"所属品类/商品名称/用户ID"三个字段从空变非空，最多 8 秒 |
 | **el-select 不响应** | `item.click()` 在 `page.evaluate` 里调用 | **`page.mouse.click(x, y)` 真实鼠标坐标点击**（synthetic click 经常被 Element UI 忽略，需要等 dropdown 完全渲染——加 2000ms 等待 + getBoundingClientRect 重试机制避免 (0,0) 坐标）|
 | **el-upload 不更新 UI** | `input.dispatchEvent('change')` | **`elUpload.__vue__.handleChange(fakeEvent)` 直接调用 Element UI 内部处理器**（synthetic Event 不被 Element UI 接收，必须通过 Vue 实例直接调用，传入 `{ target: { files: dt.files } }`）|
-| **QuickJS 无 fs** | `page.setInputFiles(path)` | **QuickJS 沙箱无 fs 模块！** 用 `readFile` 读 PDF 文本 → `TextEncoder` 编码成 Uint8Array → `new File([uint8], name, { type })` → DataTransfer 设置到 input |
+| **QuickJS 无 fs + readFile 仅 utf8** | `page.setInputFiles(path)` / `readFile` 读 PDF | **沙箱无法读磁盘二进制！** 调用方 base64 编码 PDF → `invoice_pdf_base64` 传入 → `page.evaluate` 内 `atob` 还原 → `new File` → `DataTransfer` → `el-upload.__vue__.handleChange`。路径模式 setInputFiles 会被禁用的 `platform.fs` 拦截，readFile 是 utf8 会截断二进制（104960字节→97字节） |
 | PDF 上传失败 | 把 PDF 拖到对话框 | 见上：用 `vue.handleChange(fakeEvent)` |
 | **Vue 响应式更新延迟** | 操作完立刻截图 | 每个 Vue 操作后等 300-1500ms（v-model.nextTick）；截图前统一等 1500ms |
 | **误提交** | 填完字段自动点确定 | **默认 confirm=false**，弹窗保持打开；只截图不提交。需显式传 confirm=true 才点 |
 | 字段类型错误 | 传入"个人"或"普通发票" | 强校验白名单："电子普通发票"/"增值税专用发票" + "个人/非企业"/"企业" |
 | Windows 路径 | `"C:\\Users\\..."` 双反斜杠 (静默崩溃) | `"C:\Users\..."` 单反斜杠 |
-| PDF >2000KB | 不检查大小 | 上传前用 `getFileSize()`（QuickJS 内置）检查，超限立即拒绝 |
+| PDF >2000KB | 不检查大小 | 沙箱无法读磁盘文件大小，由**调用方**提供 `pdf_size_bytes` 字段，脚本据此拒绝超限（>2000KB） |
 
 ## 已验证测试场景
 
