@@ -432,24 +432,27 @@ async function uploadPdf(page, pdfBase64, pdfName) {
   // 等 el-upload 组件异步处理（onChange → fileList → UI 重渲染）
   await page.waitForTimeout(1200);
 
-  // 校验文件确实挂载到 input.files 且 el-upload fileList 已更新（字节完整）
+  // 校验文件确实挂载到 el-upload fileList（el-upload 的真实挂载证据）
+  // 注意：原生 input.files 是只读属性，JS 无法直接赋值，恒为 0，不能作为失败判据
   var check = await page.evaluate(function(sel) {
     var input = document.querySelector(sel);
     if (!input) return { ok: false, error: 'input 丢失' };
     var uploads = input.closest('.el-upload');
     var vue = uploads && uploads.__vue__;
-    var f = input.files && input.files.length ? input.files[0] : null;
+    var fl = vue && vue.fileList ? vue.fileList : [];
+    var f = fl.length ? fl[0] : null;
+    var raw = f ? (f.raw || f) : null;
     return {
       ok: true,
       filesLength: input.files ? input.files.length : 0,
-      fileName: f ? f.name : '',
-      fileSize: f ? f.size : 0,
-      fileListLength: vue && vue.fileList ? vue.fileList.length : -1
+      fileListLength: fl.length,
+      fileName: raw ? raw.name : (f ? f.name : ''),
+      fileSize: raw ? raw.size : (f ? f.size : 0)
     };
   }, selector);
 
-  if (!check.ok || check.filesLength === 0) {
-    return { ok: false, error: 'PDF 未成功挂载到 input.files: ' + JSON.stringify(check) };
+  if (!check.ok || check.fileListLength < 1) {
+    return { ok: false, error: 'PDF 未成功挂载到 el-upload fileList: ' + JSON.stringify(check) };
   }
 
   return {
