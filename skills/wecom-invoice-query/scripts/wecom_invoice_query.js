@@ -7,7 +7,7 @@
 //    必须等 activeSheet 的 getRowCount 可用再查，否则 getSheetBySheetId 返回 undefined。
 
 const PAGE = "wecom-doc";
-const DOC_URL = "https://doc.weixin.qq.com/sheet/e3_AVMAQQakAJkCNXmwewsKhRaGO0P3h";
+const DEFAULT_DOC_URL = "https://doc.weixin.qq.com/sheet/e3_AVMAQQakAJkCNXmwewsKhRaGO0P3h";
 const INPUT_PATH = "wecom_query_input.json";
 const OUTPUT_PATH = "wecom_query_output.json";
 
@@ -18,24 +18,26 @@ function step(n, total, msg) {
 
 // ---- 读取输入（readFile 是异步的，必须 await）----
 let orderNum = null;
+let docUrl = null;
 try {
   const raw = await readFile(INPUT_PATH);
   const cfg = JSON.parse(raw);
   orderNum = cfg.order_num || cfg.orderNum || cfg.order_id || null;
+  docUrl = cfg.doc_url || null;
 } catch (e) {
   console.log(JSON.stringify({ error: "input_read_failed", detail: String(e) }));
 }
 if (!orderNum) {
   console.log(JSON.stringify({ error: "no_order_num", hint: "请在 wecom_query_input.json 提供 order_num" }));
 } else {
-  await main();
+  await main(docUrl || DEFAULT_DOC_URL);
 }
 
-async function main() {
+async function main(docUrl) {
   const page = await browser.getPage(PAGE);
 
-  step(1, 5, `打开企微文档 ${DOC_URL}`);
-  await page.goto(DOC_URL, { waitUntil: "domcontentloaded" });
+  step(1, 5, `打开企微文档 ${docUrl}`);
+  await page.goto(docUrl, { waitUntil: "domcontentloaded" });
 
   step(2, 5, "等待 SpreadsheetApp 引擎就绪（轮询 workbook）...");
   const appReady = await waitForAppReady(page, 20000);
@@ -82,7 +84,7 @@ async function main() {
 
   step(5, 5, "查询完成，写出结果");
   console.log(JSON.stringify(result, null, 2));
-  try { writeFile(OUTPUT_PATH, JSON.stringify(result, null, 2)); } catch (e) {}
+  try { await writeFile(OUTPUT_PATH, JSON.stringify(result, null, 2)); } catch (e) {}
 }
 
 async function waitForAppReady(page, timeoutMs) {

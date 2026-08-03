@@ -155,14 +155,16 @@ cat ~/.dev-browser/tmp/interest_island_output.json
 
 ## 文件结构
 
+本 skill 位于多 skill 仓库 `interest_island_invoice_checker/skills/order-invoice-checker/`：
+
 ```
-interest_island_invoice_checker/
+order-invoice-checker/
 ├── SKILL.md                                    ← 本文件
-├── README.md                                   ← 使用说明 + 测试记录
-├── config/
-│   ├── settings.json                           ← URL、浏览器实例、超时配置
-│   └── selectors.json                          ← DOM 定位策略 + API 参数参考
 ├── automation/
 │   └── interest_island_order_check.js          ← 主流程脚本 (v2.0 QuickJS)
-└── screenshots/                                ← 自动生成的截图
+└── config/
+    ├── settings.json                           ← URL、浏览器实例、超时配置
+    └── selectors.json                          ← DOM 定位策略 + API 参数参考
 ```
+
+仓库根目录另有 README.md（总览）和其它 4 个 skill（invoice-pipeline / wecom-invoice-query / invoice-create / wecom-invoice-import），详见根 README。

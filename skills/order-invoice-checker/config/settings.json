@@ -20,12 +20,12 @@
     }
   },
   "browser": {
-    "page_name": "main",
+    "page_name": "interest-island",
     "browser_instance": "interest-island",
     "mode": "visible",
     "login_persistence": true,
     "idle_timeout": "0",
-    "note": "使用 --browser interest-island --idle-timeout 0 启动可见浏览器，复用命名页 main 保持登录会话"
+    "note": "使用 --browser interest-island --idle-timeout 0 启动可见浏览器，复用命名页 interest-island 保持登录会话（与代码 getPage('interest-island') 一致）"
   },
   "timeouts": {
     "page_navigation_ms": 30000,

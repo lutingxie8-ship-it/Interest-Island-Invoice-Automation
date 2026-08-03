@@ -3,7 +3,7 @@
     "based_on_real_screenshots": true,
     "verified_at": "2026-07-29",
     "source": "用户提供截图 + 兴趣岛 /finance/invoice 页面分析",
-    "note": "新建发票弹窗是 el-dialog portal 渲染，需要从 document.body 全局定位"
+    "note": "新建发票弹窗是 el-dialog portal 渲染，需要从 document.body 全局定位。本文件为定位策略参考，代码实际按 label 文本匹配字段（findInputInDialog），trigger_selector 中的 jQuery 伪选择器（:has/:contains）未被代码使用"
   },
   "login": {
     "detection": {
@@ -26,9 +26,9 @@
     "page_title": "开票审核",
     "trigger_buttons": {
       "new_invoice": {
-        "text": "批量开票",
+        "text": "新建",
         "type": "button (primary 蓝色)",
-        "note": "点击后弹出'新建发票'对话框（图2）"
+        "note": "点击后弹出'新建发票'对话框（图2）。不要点'批量开票'，那会弹出保密承诺函"
       }
     },
     "table": {
@@ -38,7 +38,7 @@
         "用户昵称", "所属品类", "商品名称", "支付金额", "抬头类型",
         "发票抬头", "退款金额", "操作"
       ],
-      "note": "本 skill 不操作表格行数据，只触发'批量开票'进入弹窗"
+      "note": "本 skill 不操作表格行数据，只触发'新建'进入弹窗"
     }
   },
   "new_invoice_dialog": {
@@ -125,7 +125,7 @@
         "component": "el-upload",
         "trigger_text": "点击上传",
         "file_input_selector": ".el-dialog input[type='file']",
-        "note": "需找隐藏的 file input，用 setInputFiles 设置路径"
+        "note": "隐藏的 file input。沙箱无法用 setInputFiles(path)（fs 被禁用），改用 base64 通路：调用方传 invoice_pdf_base64 → evaluate 内 atob 还原 → new File → DataTransfer → 驱动 el-upload.__vue__.handleChange"
       },
       "remarks": {
         "label_text": "备注",
@@ -165,8 +165,8 @@
   "el_upload": {
     "trigger_text": "点击上传",
     "file_input_in_dom": "input[type='file'] 通常被 display:none 隐藏",
-    "upload_method": "page.setInputFiles(filePath) 或在 evaluate 内用 DataTransfer 模拟",
-    "size_limit_note": "PDF ≤ 2000KB，否则后端拒绝"
+    "upload_method": "base64 通路：invoice_pdf_base64 → atob → new File → DataTransfer → el-upload.__vue__.handleChange（setInputFiles(path) 因沙箱 fs 禁用不可用）",
+    "size_limit_note": "PDF ≤ 2000KB，否则后端拒绝。沙箱无法读磁盘文件大小，由调用方提供 pdf_size_bytes 字段"
   },
   "session_expired": {
     "detection": "当前 URL 包含 /login",

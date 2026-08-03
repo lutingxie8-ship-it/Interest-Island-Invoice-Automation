@@ -15,7 +15,7 @@ priority: high
 复用 `dev-browser` 启动的可见浏览器实例（命名页 `interest-island`），通过 **Vue 组件直驱** + **Element UI 操作** 结合方式操作：
 
 1. **导航**：`page.goto('/finance/invoice')` 进入开票审核页
-2. **触发弹窗**：点击"批量开票"或"新建"按钮触发 `el-dialog`（Vue 会自动挂载到 body）
+2. **触发弹窗**：点击"新建"按钮触发 `el-dialog`（Vue 会自动挂载到 body）。注意：不要点"批量开票"，那会弹出"保密承诺函"而非"新建发票"
 3. **填写字段**：
    - 订单ID：直接通过 Vue `input` v-model 设置，**会触发后端 API 自动填充**所属品类/商品名称/用户ID
    - 其他字段：同样通过 Vue 组件 `input`/`change` 事件设置

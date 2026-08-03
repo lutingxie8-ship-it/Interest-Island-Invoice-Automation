@@ -128,11 +128,17 @@
     ],
     "action_column_index": "last cell (倒数第一个 td)",
     "action_buttons_text_order": [
-      "复制链接",   // 部分订单显示为 "复制开票链接"
-      "详情",        // ← 本 Skill 唯一允许点击
-      "换营",        // 禁止
-      "追赠"         // 禁止
+      "复制链接",
+      "详情",
+      "换营",
+      "追赠"
     ],
+    "action_buttons_notes": {
+      "复制链接": "部分订单显示为 '复制开票链接'",
+      "详情": "本 Skill 唯一允许点击",
+      "换营": "禁止",
+      "追赠": "禁止"
+    },
     "detail_button_locator": "lastCell.querySelectorAll('button') 中 text === '详情'",
     "forbidden_actions": ["换营", "追赠", "复制链接", "复制开票链接"]
   },
@@ -172,7 +178,7 @@
         "present_only_if_invoiced": true,
         "extraction_strategy": "从 document.body.innerText 中查找 '发票信息' 关键字",
         "expected_subfields_if_present": [
-          "发票类型", "发票抬头", "企业税号", "发票链接", "开票时间"
+          "发票类型", "抬头类型", "发票抬头", "企业税号", "操作人", "操作时间", "发票链接"
         ],
         "abnormal_handling": "标题存在但内容加载失败/为空 → 转人工复核"
       }

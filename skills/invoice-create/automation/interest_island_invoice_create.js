@@ -5,7 +5,7 @@
  * 工作流程：
  *   1. 读取输入 + 强校验（发票类型/抬头类型必须在白名单内）
  *   2. 登录检测 → 导航到 /finance/invoice
- *   3. 点击"批量开票"按钮 → 等待 el-dialog 弹出
+ *   3. 点击"新建"按钮 → 等待 el-dialog 弹出
  *   4. 填写订单ID → 轮询等待 3 个 auto-fill 字段（所属品类/商品名称/用户ID）
  *   5. 填写开票金额 + 发票类型 + 抬头类型 + 发票抬头 + 企业税号
  *   6. 上传 PDF（调用方 base64 编码后由 invoice_pdf_base64 传入，沙箱内 atob 还原）
@@ -531,7 +531,7 @@ async function main() {
   await navigateToInvoiceReview(page);
   await page.waitForTimeout(2000);
 
-  // 5) 点击"批量开票"按钮
+  // 5) 点击"新建"按钮
   var clickRes = await clickNewInvoiceButton(page);
   log('CLICK_NEW', 'result', clickRes);
   if (!clickRes.ok) {
@@ -539,7 +539,7 @@ async function main() {
       task_id: taskId, order_id: orderId,
       query_status: 'dialog_open_failed', result_status: 'rejected',
       order_id_recognized: null, auto_fill: null,
-      decision_reason: '点击"批量开票"按钮失败: ' + clickRes.error,
+      decision_reason: '点击"新建"按钮失败: ' + clickRes.error,
       safety_check: { confirm_requested: input.confirm, confirm_executed: false, pdf_uploaded: false }
     }));
     return { ok: false };
