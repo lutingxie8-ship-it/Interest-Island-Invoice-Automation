@@ -56,9 +56,10 @@
   "fallback": {
     "login_required_status": "login_required",
     "invalid_input_status": "invalid_input",
-    "page_structure_change_status": "manual_review",
-    "auto_fill_timeout_status": "safety_aborted",
-    "pdf_too_large_status": "safety_aborted",
-    "dialog_open_failed_status": "page_structure_change"
+    "page_structure_change_status": "page_structure_change",
+    "auto_fill_timeout_status": "auto_fill_timeout",
+    "pdf_too_large_status": "invalid_input",
+    "dialog_open_failed_status": "dialog_open_failed",
+    "_note": "本块为状态映射说明，代码未读取此配置；值与 interest_island_invoice_create.js 实际写入的 query_status 对齐"
   }
 }

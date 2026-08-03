@@ -86,7 +86,7 @@ const ALLOWED_TITLE_TYPES = ['个人/非企业', '企业'];
 {
   task_id: string | null,
   order_id: string,
-  query_status: 'success' | 'login_required' | 'invalid_input' | 'page_structure_change' | 'dialog_open_failed' | 'auto_fill_timeout' | 'pdf_upload_failed' | 'safety_aborted',
+  query_status: 'success' | 'login_required' | 'invalid_input' | 'page_structure_change' | 'dialog_open_failed' | 'auto_fill_timeout' | 'pdf_upload_failed',
   result_status: 'filled_not_submitted' | 'submitted' | 'rejected' | 'login_required',
   order_id_recognized: boolean | null,  // 订单ID填写后是否识别成功（auto-fill 字段已填充）
   auto_fill: {

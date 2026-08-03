@@ -93,7 +93,7 @@ dev-browser --browser interest-island --idle-timeout 0 --timeout 120 run "C:\Use
 或从项目路径直接运行：
 
 ```bash
-dev-browser --browser interest-island --idle-timeout 0 --timeout 120 run "C:\Users\EDY\WorkBuddy\2026-07-27-10-31-48\interest_island_invoice_checker\automation\interest_island_order_check.js"
+dev-browser --browser interest-island --idle-timeout 0 --timeout 120 run "C:\Users\EDY\WorkBuddy\2026-07-27-10-31-48\interest_island_invoice_checker\skills\order-invoice-checker\automation\interest_island_order_check.js"
 ```
 
 ### 3. 读取输出
