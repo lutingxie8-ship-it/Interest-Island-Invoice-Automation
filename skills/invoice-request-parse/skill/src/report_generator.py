@@ -74,12 +74,11 @@ def generate_report(data: 'ReportData', output_dir: str) -> tuple[str, str]:
 # Wave 2: MD 报告生成
 # ════════════════════════════════════════════
 
-def _truncate(text: str, n: int = 150) -> str:
-    """截断正文用于 md 表格展示：空返回 —，超长截断加 …，换行转空格。"""
+def _body_for_table(text: str) -> str:
+    """正文用于 md 表格展示：空返回 —，换行转空格（避免破坏表格结构），不截断长度。"""
     if not text:
         return "—"
-    text = text.replace("\n", " ").replace("\r", " ").strip()
-    return text[:n] + "…" if len(text) > n else text
+    return text.replace("\n", " ").replace("\r", " ").strip()
 
 
 def _generate_md(data: 'ReportData', output_path: str):
@@ -111,7 +110,7 @@ def _generate_md(data: 'ReportData', output_path: str):
             order_id_bold = f"**{o.order_id_cleaned}**"
             lines.append(
                 f"| {order_id_bold} | {o.amount_raw} | {o.note} | {o.title} | {o.tax_id} | "
-                f"{o.message_subject} | {o.message_sender} | {o.message_date} | {_truncate(o.message_body)} |"
+                f"{o.message_subject} | {o.message_sender} | {o.message_date} | {_body_for_table(o.message_body)} |"
             )
         lines.append("")
 
@@ -124,7 +123,7 @@ def _generate_md(data: 'ReportData', output_path: str):
         for o in data.normal_orders:
             lines.append(
                 f"| {o.order_id_cleaned} | {o.amount_raw} | {o.note} | {o.title} | {o.tax_id} | "
-                f"{o.message_subject} | {o.message_sender} | {o.message_date} | {_truncate(o.message_body)} |"
+                f"{o.message_subject} | {o.message_sender} | {o.message_date} | {_body_for_table(o.message_body)} |"
             )
         lines.append("")
 
@@ -138,7 +137,7 @@ def _generate_md(data: 'ReportData', output_path: str):
             lines.append(
                 f"| {o.order_id_original} | {o.order_id_cleaned} | {o.validation_reason} | "
                 f"{o.amount_raw} | {o.note} | "
-                f"{o.message_subject} | {o.message_sender} | {o.message_date} | {_truncate(o.message_body)} |"
+                f"{o.message_subject} | {o.message_sender} | {o.message_date} | {_body_for_table(o.message_body)} |"
             )
         lines.append("")
 
