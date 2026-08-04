@@ -92,7 +92,9 @@ EOF
 运行规范化脚本（实时打印分步日志 + 最终 JSON 到 `wecom_query_output.json`）：
 
 ```bash
-dev-browser --browser wecom --idle-timeout 30m --timeout 90 run "scripts/wecom_invoice_query.js"
+# ⚠️ 运行前先合并公共库（skills/_common/lib.js）：在仓库根目录执行一次
+python tools/build_all.py
+dev-browser --browser wecom --idle-timeout 30m --timeout 90 run "build/wecom_invoice_query.merged.js"
 ```
 
 脚本会打印类似下面的分步进度，每一步都可见：

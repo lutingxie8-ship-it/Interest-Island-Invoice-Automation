@@ -11,10 +11,7 @@ const DEFAULT_DOC_URL = "https://doc.weixin.qq.com/sheet/e3_AVMAQQakAJkCNXmwewsK
 const INPUT_PATH = "wecom_query_input.json";
 const OUTPUT_PATH = "wecom_query_output.json";
 
-// 统一进度日志格式：[步骤 n/N] 描述
-function step(n, total, msg) {
-  console.log(`[步骤 ${n}/${total}] ${msg}`);
-}
+// 统一进度日志 step() 来自公共库 skills/_common/lib.js（运行前用 tools/merge_js.py 合并）
 
 // ---- 读取输入（readFile 是异步的，必须 await）----
 let orderNum = null;
@@ -87,34 +84,4 @@ async function main(docUrl) {
   try { await writeFile(OUTPUT_PATH, JSON.stringify(result, null, 2)); } catch (e) {}
 }
 
-async function waitForAppReady(page, timeoutMs) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const ok = await page.evaluate(() =>
-      typeof window.SpreadsheetApp !== 'undefined'
-      && window.SpreadsheetApp
-      && !!window.SpreadsheetApp.workbook
-      && !!window.SpreadsheetApp.workbook.worksheetManager
-    );
-    if (ok) return { ok: true, elapsed: Date.now() - start };
-    await page.waitForTimeout(300);
-  }
-  return { ok: false, elapsed: timeoutMs };
-}
-
-async function waitForSheetReady(page, timeoutMs) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const ok = await page.evaluate(() => {
-      try {
-        const app = window.SpreadsheetApp;
-        const sid = app.workbook.worksheetManager.activeSheetId;
-        const sheet = app.workbook.worksheetManager.getSheetBySheetId(sid);
-        return !!(sheet && typeof sheet.getRowCount === 'function');
-      } catch (e) { return false; }
-    });
-    if (ok) return { ok: true, elapsed: Date.now() - start };
-    await page.waitForTimeout(500);
-  }
-  return { ok: false, elapsed: timeoutMs };
-}
+// waitForAppReady() / waitForSheetReady() 来自公共库 skills/_common/lib.js（运行前用 tools/merge_js.py 合并）

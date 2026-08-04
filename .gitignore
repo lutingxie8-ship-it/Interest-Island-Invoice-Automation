@@ -10,3 +10,6 @@ skills/*/screenshots/*
 # 系统文件
 .DS_Store
 Thumbs.db
+
+# 合并产物（由 tools/build_all.py 生成，运行前自动构建，不应提交）
+build/

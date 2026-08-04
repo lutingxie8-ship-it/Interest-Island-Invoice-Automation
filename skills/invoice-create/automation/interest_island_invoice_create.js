@@ -32,10 +32,8 @@ var AUTO_FILL_POLL_MS = 500;
 var AUTO_FILL_MAX_WAIT_MS = 8000;
 
 // ===================== 工具函数 =====================
-function ts() { return new Date().toISOString().replace('T', ' ').substring(0, 19); }
-function log(stage, msg, extra) {
-  console.log('[CREATE][' + ts() + '] ' + stage + ': ' + msg + (extra ? ' ' + JSON.stringify(extra) : ''));
-}
+// ts() / fmtLog() 来自公共库 skills/_common/lib.js（运行前用 tools/merge_js.py 合并）
+function log(stage, msg, extra) { console.log(fmtLog('CREATE', stage, msg, extra)); }
 
 // ===================== 输入读取 + 强校验 =====================
 async function loadAndValidateInput() {

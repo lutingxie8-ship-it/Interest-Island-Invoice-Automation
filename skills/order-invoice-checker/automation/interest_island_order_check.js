@@ -18,10 +18,8 @@
  */
 
 // ===================== 工具函数 =====================
-function ts() { return new Date().toISOString().replace('T', ' ').substring(0, 19); }
-function log(stage, msg, extra) {
-  console.log('[ISLAND][' + ts() + '] ' + stage + ': ' + msg + (extra ? ' ' + JSON.stringify(extra) : ''));
-}
+// ts() / fmtLog() 来自公共库 skills/_common/lib.js（运行前用 tools/merge_js.py 合并）
+function log(stage, msg, extra) { console.log(fmtLog('ISLAND', stage, msg, extra)); }
 
 // ===================== 登录检测（v2.0 修复：用 URL 判断而非文本匹配） =====================
 async function checkLogin(page) {

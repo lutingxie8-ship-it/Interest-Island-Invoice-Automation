@@ -122,7 +122,9 @@ dev-browser status
 ⚠️ **不要用 heredoc**（JS 中的单引号会破坏 bash 解析），**不要用双反斜杠路径**（会静默崩溃）。
 
 ```bash
-dev-browser --browser interest-island --idle-timeout 0 --timeout 120 run "C:\Users\EDY\WorkBuddy\2026-07-27-10-31-48\interest_island_invoice_checker\skills\invoice-create\automation\interest_island_invoice_create.js"
+# ⚠️ 运行前先合并公共库（skills/_common/lib.js）：在仓库根目录执行一次
+python tools/build_all.py
+dev-browser --browser interest-island --idle-timeout 0 --timeout 120 run "build/interest_island_invoice_create.merged.js"
 ```
 
 ### 4. 检查输出

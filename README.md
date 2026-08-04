@@ -24,6 +24,7 @@
 2. **Python 3.8+**：WorkBuddy 自带
 3. **openpyxl**：仅发票录入 skill 需要，运行 `python skills/wecom-invoice-import/scripts/setup.py` 自动安装
 4. **首次扫码登录**：各 skill 首次使用时需要在弹出的浏览器窗口扫码登录
+5. **构建（抽公共库后）**：4 个浏览器脚本运行前需先合并公共库——在仓库根目录执行 `python tools/build_all.py` 生成 `build/*.merged.js`，再用 `dev-browser run "build/<脚本>.merged.js"` 运行（详见各 skill 的 SKILL.md）
 
 ---
 
@@ -107,6 +108,8 @@ Interest-Island-Invoice-Automation/
 ├── README.md                              ← 本文件（总览）
 ├── .gitignore
 ├── skills/
+│   ├── _common/                           ← 公共库（单一事实来源）
+│   │   └── lib.js                         ← 跨脚本公共函数：ts/fmtLog/step/waitForAppReady/waitForSheetReady
 │   ├── invoice-pipeline/                  ← Skill 1：开票主编排（纯文档编排）
 │   │   └── SKILL.md
 │   ├── wecom-invoice-query/               ← Skill 4：企微发票查询（步骤 4）
@@ -134,6 +137,15 @@ Interest-Island-Invoice-Automation/
 │           ├── setup.py                   ← 环境检查与依赖安装
 │           ├── read_excel_to_tsv.py       ← Excel 转 TSV
 │           └── wecom_invoice_import.js    ← 录入脚本（8步，含防幽灵粘贴/列对齐校验）
+├── tools/                                 ← 构建/验证工具（抽公共库用）
+│   ├── merge_js.py                        ← 把 lib.js 拼到业务脚本头部
+│   ├── build_all.py                       ← 一键合并全部 4 个业务脚本
+│   └── verify_lib.mjs                     ← lib.js 纯函数自检
+├── build/                                 ← 合并产物（gitignore，由 tools 生成）
+│   ├── wecom_invoice_query.merged.js
+│   ├── wecom_invoice_import.merged.js
+│   ├── interest_island_order_check.merged.js
+│   └── interest_island_invoice_create.merged.js
 ├── logs/                                  ← 运行日志（gitignore）
 └── screenshots/                           ← 截图（gitignore）
 ```
@@ -142,6 +154,7 @@ Interest-Island-Invoice-Automation/
 
 ## 版本
 
+- **v7.0.0** (2026-08-04)：重构——抽公共库 `skills/_common/lib.js`，4 个业务脚本改为构建时合并（tools/merge_js.py + build_all.py），消除重复的 waitForAppReady/waitForSheetReady/step/ts/log；新增 tools/verify_lib.mjs 自检
 - **v6.0.0** (2026-08-03)：复盘优化——import 重写为独立脚本（根治幽灵粘贴+列偏移）；invoice-create 状态枚举/路径/selectors 与代码对齐；wecom-query doc_url 输入化 + writeFile await
 - **v5.0.0** (2026-07-29)：新增发票新建 skill + invoice-pipeline 主编排
 - **v4.0.0** (2026-07-28)：新增企微发票查询 skill（只读查询订单号是否已开票）

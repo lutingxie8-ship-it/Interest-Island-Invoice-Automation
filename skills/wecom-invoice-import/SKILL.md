@@ -78,7 +78,9 @@ python "<skill目录>/scripts/read_excel_to_tsv.py" "<excel文件路径>" > tsv.
 **运行脚本**：
 
 ```bash
-dev-browser --browser wecom --idle-timeout 30m --timeout 240 run "<skill目录>/scripts/wecom_invoice_import.js"
+# ⚠️ 运行前先合并公共库（skills/_common/lib.js）：在仓库根目录执行一次
+python tools/build_all.py
+dev-browser --browser wecom --idle-timeout 30m --timeout 240 run "build/wecom_invoice_import.merged.js"
 ```
 
 脚本分 8 步执行，每步打印 `[步骤 n/8]` 进度日志：
