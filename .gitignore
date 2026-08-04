@@ -11,5 +11,15 @@ skills/*/screenshots/*
 .DS_Store
 Thumbs.db
 
+# Python 运行时/缓存（venv 体积大且环境相关，不应提交）
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# skill 运行时日志
+**/skill/logs/
+**/logs/
+
 # 合并产物（由 tools/build_all.py 生成，运行前自动构建，不应提交）
 build/
