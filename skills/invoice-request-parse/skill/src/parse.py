@@ -247,10 +247,10 @@ def run() -> list:
 
     # 生成报告
     data = _build_report_data(kept, stats, failed_entries)
-    md_path, xlsx_path = generate_report(data, reports)
+    md_path, json_path = generate_report(data, reports)
     logger.info(
         f"parse 完成：校验 {len(kept)} 笔, 失败 {len(failed_entries)} 笔, "
-        f"报告 → {md_path}"
+        f"报告 → {md_path} ; 结构化 → {json_path}"
     )
 
     # 记录历史 + 移走成功侧车到 processed/（失败的已在 _handle_failure 中处理）

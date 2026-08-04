@@ -1,6 +1,7 @@
 # src/report_generator.py
-# 职责：将处理后数据生成为 .md（给大模型）和 .xlsx（给人看）双报告
+# 职责：将处理后数据生成为 .md（给人看）和 .json（给大模型/下游结构化消费）双报告
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 import os
@@ -36,14 +37,14 @@ class ReportData:
 
 def generate_report(data: 'ReportData', output_dir: str) -> tuple[str, str]:
     """
-    入口：生成 .md 和 .xlsx 双报告。
+    入口：生成 .md（人视图）和 .json（结构化，给大模型/下游直接消费）双报告。
 
     Args:
         data: 已聚合的 ReportData（由调用方构建）
         output_dir: 输出目录路径（自动创建）
 
     Returns:
-        (md_path, xlsx_path) 双报告文件完整路径
+        (md_path, json_path) 双报告文件完整路径
     """
     # 1. 确保输出目录存在
     os.makedirs(output_dir, exist_ok=True)
@@ -55,15 +56,15 @@ def generate_report(data: 'ReportData', output_dir: str) -> tuple[str, str]:
         f"{now.hour:02d}-{now.minute:02d}_发票邮件报告"
     )
 
-    # 3. 生成 .md
+    # 3. 生成 .md（人视图）
     md_path = os.path.join(output_dir, filename_prefix + ".md")
     _generate_md(data, md_path)
 
-    # 4. 生成 .xlsx
-    xlsx_path = os.path.join(output_dir, filename_prefix + ".xlsx")
-    _generate_xlsx(data, xlsx_path)
+    # 4. 生成 .json（结构化，供大模型/下游直接 json.load 消费）
+    json_path = os.path.join(output_dir, filename_prefix + ".json")
+    _generate_json(data, json_path)
 
-    return (md_path, xlsx_path)
+    return (md_path, json_path)
 
 
 # ── 数据聚合 ──
@@ -170,175 +171,56 @@ def _generate_md(data: 'ReportData', output_path: str):
 
 
 # ════════════════════════════════════════════
-# Wave 3: XLSX 报告生成
+# 结构化 JSON 报告生成（供大模型/下游直接 json.load 消费，字段零歧义）
 # ════════════════════════════════════════════
 
-def _generate_xlsx(data: 'ReportData', output_path: str):
-    """
-    生成 .xlsx 报告文件（5 个 Sheet）。
+def _generate_json(data: 'ReportData', output_path: str):
+    """生成 .json 结构化报告，供大模型/下游直接 json.load 消费（字段零歧义）。"""
 
-    Sheet 1: 汇总 —— 运行时间、各分类数量
-    Sheet 2: 加急订单 —— 订单号加粗、整行标黄
-    Sheet 3: 正常订单
-    Sheet 4: 订单号异常
-    Sheet 5: 疑似不确定邮件
-    """
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
+    def order_to_dict(o):
+        return {
+            "order_id_original": getattr(o, "order_id_original", ""),
+            "order_id_cleaned": getattr(o, "order_id_cleaned", ""),
+            "amount_raw": getattr(o, "amount_raw", ""),
+            "amount": getattr(o, "amount", None),
+            "note": getattr(o, "note", ""),
+            "title": getattr(o, "title", ""),
+            "tax_id": getattr(o, "tax_id", ""),
+            "is_valid": getattr(o, "is_valid", None),
+            "validation_reason": getattr(o, "validation_reason", ""),
+            "quadrant": getattr(o, "quadrant", ""),
+            "message_subject": getattr(o, "message_subject", ""),
+            "message_sender": getattr(o, "message_sender", ""),
+            "message_date": getattr(o, "message_date", ""),
+        }
 
-    wb = Workbook()
-
-    # ── Sheet 1: 汇总 ──
-    ws1 = wb.active
-    ws1.title = "汇总"
-    _write_summary_sheet(ws1, data)
-
-    # ── Sheet 2: 加急订单 ──
-    ws2 = wb.create_sheet("加急订单")
-    _write_order_sheet(ws2, data.urgent_orders, is_urgent=True)
-
-    # ── Sheet 3: 正常订单 ──
-    ws3 = wb.create_sheet("正常订单")
-    _write_order_sheet(ws3, data.normal_orders, is_urgent=False)
-
-    # ── Sheet 4: 订单号异常 ──
-    ws4 = wb.create_sheet("订单号异常")
-    _write_invalid_sheet(ws4, data.invalid_orders)
-
-    # ── Sheet 5: 疑似不确定邮件 ──
-    ws5 = wb.create_sheet("疑似不确定邮件")
-    _write_uncertain_sheet(ws5, data.uncertain_entries)
-
-    # ── Sheet 6: 解析失败 ──
-    ws6 = wb.create_sheet("解析失败")
-    _write_failed_sheet(ws6, data.failed_entries)
-
-    wb.save(output_path)
-
-
-def _write_summary_sheet(ws, data: 'ReportData'):
-    """写入汇总 Sheet。"""
-    from openpyxl.styles import Font
-    headers = ["项目", "数值"]
-    ws.append(headers)
-    ws.append(["运行时间", data.run_time])
-    ws.append(["处理未读邮件数", data.total_unread])
-    ws.append(["开票邮件数", data.invoice_count])
-    ws.append(["加急订单数", data.urgent_count])
-    ws.append(["正常订单数", len(data.normal_orders)])
-    ws.append(["异常订单数", len(data.invalid_orders)])
-    ws.append(["疑似不确定邮件数", data.uncertain_count])
-    ws.append(["解析失败数", data.failed_count])
-
-    # 表头加粗
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-
-
-def _write_order_sheet(ws, orders, is_urgent: bool):
-    """
-    写入订单 Sheet（加急 / 正常）。
-
-    列：订单号 | 开票金额 | 备注 | 来源邮件主题 | 发件人 | 邮件时间
-    """
-    from openpyxl.styles import Font, PatternFill
-    headers = ["订单号", "开票金额", "备注", "发票抬头", "税号", "来源邮件主题", "发件人", "邮件时间"]
-    ws.append(headers)
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-
-    # 加急 Sheet 样式
-    yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-    bold_font = Font(bold=True)
-
-    for order in orders:
-        row_data = [
-            order.order_id_cleaned,
-            order.amount_raw,
-            order.note,
-            order.title,
-            order.tax_id,
-            order.message_subject,
-            order.message_sender,
-            order.message_date,
-        ]
-        ws.append(row_data)
-
-        if is_urgent:
-            # 加急：订单号加粗 + 整行标黄
-            row_idx = ws.max_row
-            for col_idx in range(1, len(headers) + 1):
-                cell = ws.cell(row=row_idx, column=col_idx)
-                cell.fill = yellow_fill
-            # 订单号列（第 1 列）额外加粗
-            ws.cell(row=row_idx, column=1).font = bold_font
-
-
-def _write_invalid_sheet(ws, orders):
-    """
-    写入异常 Sheet。
-
-    列：订单号原文 | 清洗后数字 | 异常原因 | 开票金额 | 备注 | 来源邮件主题 | 发件人 | 邮件时间
-    """
-    from openpyxl.styles import Font
-    headers = ["订单号原文", "清洗后数字", "异常原因", "开票金额", "备注", "来源邮件主题", "发件人", "邮件时间"]
-    ws.append(headers)
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-
-    for order in orders:
-        ws.append([
-            order.order_id_original,
-            order.order_id_cleaned,
-            order.validation_reason,
-            order.amount_raw,
-            order.note,
-            order.message_subject,
-            order.message_sender,
-            order.message_date,
-        ])
-
-
-def _write_uncertain_sheet(ws, entries):
-    """
-    写入疑似不确定邮件 Sheet。
-
-    列：邮件主题 | 发件人 | 邮件时间 | 不确定原因
-    """
-    from openpyxl.styles import Font
-    headers = ["邮件主题", "发件人", "邮件时间", "不确定原因"]
-    ws.append(headers)
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-
-    for entry in entries:
-        msg = entry.get("message")
+    def entry_to_dict(entry):
         cls = entry.get("classification")
-        reasons = "; ".join(cls.reasons) if cls else ""
-        ws.append([
-            msg.subject if msg else "",
-            msg.sender if msg else "",
-            msg.date if msg else "",
-            reasons,
-        ])
+        msg = entry.get("message")
+        return {
+            "reasons": list(getattr(cls, "reasons", []) or []),
+            "subject": getattr(msg, "subject", ""),
+            "sender": getattr(msg, "sender", ""),
+            "date": getattr(msg, "date", ""),
+            "message_id": getattr(msg, "message_id", ""),
+        }
 
-
-def _write_failed_sheet(ws, entries):
-    """
-    写入解析失败 Sheet。
-
-    列：邮件主题 | 发件人 | 邮件时间 | 失败原因
-    """
-    from openpyxl.styles import Font
-    headers = ["邮件主题", "发件人", "邮件时间", "失败原因"]
-    ws.append(headers)
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-
-    for entry in entries:
-        ws.append([
-            entry.get("subject", ""),
-            entry.get("sender", ""),
-            entry.get("date", ""),
-            entry.get("reason", ""),
-        ])
+    payload = {
+        "run_time": data.run_time,
+        "stats": {
+            "total_unread": data.total_unread,
+            "invoice_count": data.invoice_count,
+            "urgent_count": data.urgent_count,
+            "normal_count": len(data.normal_orders),
+            "invalid_count": len(data.invalid_orders),
+            "uncertain_count": data.uncertain_count,
+            "failed_count": data.failed_count,
+        },
+        "urgent_orders": [order_to_dict(o) for o in data.urgent_orders],
+        "normal_orders": [order_to_dict(o) for o in data.normal_orders],
+        "invalid_orders": [order_to_dict(o) for o in data.invalid_orders],
+        "uncertain_entries": [entry_to_dict(e) for e in data.uncertain_entries],
+        "failed_entries": data.failed_entries,
+    }
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
