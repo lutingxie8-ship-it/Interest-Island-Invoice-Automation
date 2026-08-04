@@ -27,6 +27,7 @@ class _Cls:
 
 class _Msg:
     subject = sender = date = message_id = ""
+    body_text = ""
 
 
 def _handoff_paths(config: dict):
@@ -207,6 +208,7 @@ def run() -> list:
         msg.sender = meta.get("sender", "")
         msg.date = meta.get("date", "")
         msg.message_id = meta.get("message_id", "")
+        msg.body_text = meta.get("body_text", "")
         cls_obj = _Cls()
         cls_obj.is_urgent = bool(meta.get("is_urgent", False))
 

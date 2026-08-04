@@ -34,6 +34,7 @@ class ValidatedOrder:
     # 带默认值的字段必须置于无默认值字段之后（dataclass 约束）
     title: str = ""              # 发票抬头 — 供下游开票
     tax_id: str = ""             # 税号/统一社会信用代码 — 供下游开票（企业必填）
+    message_body: str = ""       # 邮件正文（纯文本，截断）— 供报告展示
 
 
 class OrderValidator:
@@ -136,6 +137,7 @@ class OrderValidator:
                     message_sender=message.sender,
                     message_date=message.date,
                     message_id=message.message_id,
+                    message_body=getattr(message, "body_text", ""),
                 ))
 
         return validated

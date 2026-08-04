@@ -74,6 +74,14 @@ def generate_report(data: 'ReportData', output_dir: str) -> tuple[str, str]:
 # Wave 2: MD 报告生成
 # ════════════════════════════════════════════
 
+def _truncate(text: str, n: int = 150) -> str:
+    """截断正文用于 md 表格展示：空返回 —，超长截断加 …，换行转空格。"""
+    if not text:
+        return "—"
+    text = text.replace("\n", " ").replace("\r", " ").strip()
+    return text[:n] + "…" if len(text) > n else text
+
+
 def _generate_md(data: 'ReportData', output_path: str):
     """生成 .md 报告文件。"""
     lines = []
@@ -97,13 +105,13 @@ def _generate_md(data: 'ReportData', output_path: str):
     if data.urgent_orders:
         lines.append("## 加急订单")
         lines.append("")
-        lines.append("| 订单号 | 开票金额 | 备注 | 发票抬头 | 税号 | 来源邮件主题 | 发件人 | 邮件时间 |")
-        lines.append("|---|---|---|---|---|---|---|---|")
+        lines.append("| 订单号 | 开票金额 | 备注 | 发票抬头 | 税号 | 来源邮件主题 | 发件人 | 邮件时间 | 邮件正文 |")
+        lines.append("|---|---|---|---|---|---|---|---|---|")
         for o in data.urgent_orders:
             order_id_bold = f"**{o.order_id_cleaned}**"
             lines.append(
                 f"| {order_id_bold} | {o.amount_raw} | {o.note} | {o.title} | {o.tax_id} | "
-                f"{o.message_subject} | {o.message_sender} | {o.message_date} |"
+                f"{o.message_subject} | {o.message_sender} | {o.message_date} | {_truncate(o.message_body)} |"
             )
         lines.append("")
 
@@ -111,12 +119,12 @@ def _generate_md(data: 'ReportData', output_path: str):
     if data.normal_orders:
         lines.append("## 正常订单")
         lines.append("")
-        lines.append("| 订单号 | 开票金额 | 备注 | 发票抬头 | 税号 | 来源邮件主题 | 发件人 | 邮件时间 |")
-        lines.append("|---|---|---|---|---|---|---|---|")
+        lines.append("| 订单号 | 开票金额 | 备注 | 发票抬头 | 税号 | 来源邮件主题 | 发件人 | 邮件时间 | 邮件正文 |")
+        lines.append("|---|---|---|---|---|---|---|---|---|")
         for o in data.normal_orders:
             lines.append(
                 f"| {o.order_id_cleaned} | {o.amount_raw} | {o.note} | {o.title} | {o.tax_id} | "
-                f"{o.message_subject} | {o.message_sender} | {o.message_date} |"
+                f"{o.message_subject} | {o.message_sender} | {o.message_date} | {_truncate(o.message_body)} |"
             )
         lines.append("")
 
@@ -124,13 +132,13 @@ def _generate_md(data: 'ReportData', output_path: str):
     if data.invalid_orders:
         lines.append("## 订单号异常")
         lines.append("")
-        lines.append("| 订单号原文 | 清洗后数字 | 异常原因 | 开票金额 | 备注 | 来源邮件主题 | 发件人 | 邮件时间 |")
-        lines.append("|---|---|---|---|---|---|---|---|")
+        lines.append("| 订单号原文 | 清洗后数字 | 异常原因 | 开票金额 | 备注 | 来源邮件主题 | 发件人 | 邮件时间 | 邮件正文 |")
+        lines.append("|---|---|---|---|---|---|---|---|---|")
         for o in data.invalid_orders:
             lines.append(
                 f"| {o.order_id_original} | {o.order_id_cleaned} | {o.validation_reason} | "
                 f"{o.amount_raw} | {o.note} | "
-                f"{o.message_subject} | {o.message_sender} | {o.message_date} |"
+                f"{o.message_subject} | {o.message_sender} | {o.message_date} | {_truncate(o.message_body)} |"
             )
         lines.append("")
 
@@ -192,6 +200,7 @@ def _generate_json(data: 'ReportData', output_path: str):
             "message_subject": getattr(o, "message_subject", ""),
             "message_sender": getattr(o, "message_sender", ""),
             "message_date": getattr(o, "message_date", ""),
+            "message_body": getattr(o, "message_body", ""),
         }
 
     def entry_to_dict(entry):

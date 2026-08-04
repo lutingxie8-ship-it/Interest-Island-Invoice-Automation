@@ -5,6 +5,7 @@
 
 import json
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -15,6 +16,18 @@ from skill.src.email_fetcher import EmailFetcher
 from skill.src.classifier import EmailClassifier
 
 logger = setup_logger("monitor")
+
+
+def _body_to_text(msg) -> str:
+    """提取邮件纯文本正文：优先 body_text，无则 body_html 去标签。截断前 5000 字防爆。"""
+    text = ""
+    if msg.body_text:
+        text = msg.body_text
+    elif msg.body_html:
+        text = re.sub(r"<[^>]+>", "", msg.body_html)
+        text = (text.replace("&nbsp;", " ").replace("&amp;", "&")
+                    .replace("&lt;", "<").replace("&gt;", ">"))
+    return text.strip()[:5000]
 
 
 def _handoff_pending(config: dict) -> str:
@@ -80,6 +93,7 @@ def run() -> int:
                 "date": msg.date,
                 "message_id": msg.message_id,
                 "is_urgent": cls.is_urgent,
+                "body_text": _body_to_text(msg),
                 "attachment": xlsx_path,
             }
             sidecar_path = os.path.join(pending, run_id + ".json")
