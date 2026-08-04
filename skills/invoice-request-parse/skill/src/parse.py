@@ -230,6 +230,18 @@ def run() -> list:
 
     # 即使全部解析失败也生成报告（让解析失败段可见），但两边都没记录才跳过
     if not kept and not failed_entries:
+        # 清理「已成功解析、但所有订单都被去重过滤」的孤儿侧车（如已处理过的邮件被重新抓取）；
+        # 否则它们会一直滞留在 pending/ 被反复扫描。移入 processed/ 表示「已处理/无需再处理」。
+        for sc in done_sidecars:
+            try:
+                with open(sc, "r", encoding="utf-8") as f:
+                    xlsx = json.load(f).get("attachment")
+                shutil.move(sc, os.path.join(processed, os.path.basename(sc)))
+                if xlsx and os.path.exists(xlsx):
+                    shutil.move(xlsx, os.path.join(processed, os.path.basename(xlsx)))
+                logger.info(f"侧车 {os.path.basename(sc)} 的订单此前均已处理过（去重跳过），移入 processed/")
+            except Exception as e:
+                logger.warning(f"移动去重侧车 {sc} 失败: {e}")
         logger.info("无成功解析订单，也无失败记录，跳过报告生成")
         return []
 
