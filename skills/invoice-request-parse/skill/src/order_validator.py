@@ -12,12 +12,12 @@ from typing import Optional
 class ValidatedOrder:
     """校验后的单笔订单"""
     # 原始字段（从 ParsedOrder 传递）
-    order_id_original: str       # 原始订单号（如 "主订单ID：9000000784169034"）
+    order_id_original: str       # 原始订单号（如 "主订单ID：9000000000000001"）
     amount_raw: str              # 开票金额原文
     note: str                    # 备注原文
 
     # 校验结果
-    order_id_cleaned: str        # 清洗后纯数字（如 "9000000784169034"）
+    order_id_cleaned: str        # 清洗后纯数字（如 "9000000000000001"）
     is_valid: bool               # True = 长度合法（12 或 16 位）
     validation_reason: str       # "valid" | "too_short" | "too_long" | "empty" | "non_digit"
 
@@ -53,8 +53,8 @@ class OrderValidator:
         清洗订单号：提取全部连续数字。
 
         示例：
-        - "主订单ID：9000000784169034"  → "9000000784169034"
-        - "9000000782190489"             → "9000000782190489"
+        - "主订单ID：9000000000000001"  → "9000000000000001"
+        - "9000000000000002"             → "9000000000000002"
         - "ORD-12345"                    → "12345"
         - "" / None                      → ""
         """
