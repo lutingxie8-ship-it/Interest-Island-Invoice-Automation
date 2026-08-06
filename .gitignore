@@ -23,3 +23,7 @@ __pycache__/
 
 # 合并产物（由 tools/build_all.py 生成，运行前自动构建，不应提交）
 build/
+
+# 配置文件（可能含账号/密码等凭证，绝不入库；本地填真实值或用环境变量）
+**/config.yaml
+**/config.example.yaml
