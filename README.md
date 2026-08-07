@@ -24,7 +24,7 @@
 
 七个 skill 共用以下运行环境：
 
-1. **dev-browser**（浏览器自动化工具）：WorkBuddy 自带，其他环境 `npm install -g dev-browser && dev-browser install`
+1. **dev-browser**（浏览器自动化工具）：WorkBuddy 自带；其他环境从 GitHub 安装：`git clone https://github.com/SawyerHood/dev-browser.git && cd dev-browser && npm install -g && dev-browser install`
 2. **Python 3.8+**：WorkBuddy 自带
 3. **openpyxl + PyYAML**：`invoice-mail-monitor` 与 `invoice-request-parse` 是纯 Python skill，首次需在 skill 目录建 venv 并 `pip install PyYAML openpyxl`；`wecom-invoice-import` 的 `scripts/setup.py` 也会自动检查安装 openpyxl
 4. **首次扫码登录**：浏览器自动化类 skill（wecom-invoice-query / wecom-invoice-import / order-invoice-checker / invoice-create）首次使用时需在弹出的浏览器窗口扫码登录
