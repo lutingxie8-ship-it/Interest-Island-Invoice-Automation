@@ -4,11 +4,6 @@
 
 ---
 
-## 首次使用 · 初始化（必看）
-
-本项目有两个**系统级配置**（Windows 任务计划程序 + WorkBuddy 自动化）无法纳入 Git，克隆后需在本机落地。
-👉 详见 **[INIT.md](INIT.md)** —— 内含可直接发给 WorkBuddy 的「一键初始化 Prompt」与手动步骤。
-
 ## 包含的 Skill
 
 | Skill | 目录 | 功能 |
