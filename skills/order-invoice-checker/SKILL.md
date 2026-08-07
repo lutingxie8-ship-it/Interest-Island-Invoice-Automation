@@ -175,4 +175,4 @@ order-invoice-checker/
     └── selectors.json                          ← DOM 定位策略 + API 参数参考
 ```
 
-仓库根目录另有 README.md（总览）和其它 4 个 skill（invoice-pipeline / wecom-invoice-query / invoice-create / wecom-invoice-import），详见根 README。
+仓库根目录另有 README.md（总览）和其它 6 个 skill（invoice-pipeline / invoice-mail-monitor / invoice-request-parse / wecom-invoice-query / invoice-create / wecom-invoice-import），详见根 README。
