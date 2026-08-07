@@ -122,7 +122,9 @@ class EmailFetcher:
             return []
 
         try:
-            imap.select("INBOX", readonly=True)
+            # 注意：必须读写模式打开，后续 mark_as_read 才能 STORE +FLAGS (\Seen)。
+            # 仅靠 fetch 不会误标已读——fetch_message 已改用 BODY.PEEK[]。
+            imap.select("INBOX")
             result, data = imap.uid("SEARCH", "UNSEEN")
             if result != "OK":
                 logger.warning("搜索未读邮件失败: %s", result)
@@ -155,7 +157,10 @@ class EmailFetcher:
             return None
 
         try:
-            result, data = imap.uid("FETCH", str(uid), "(RFC822)")
+            # 用 BODY.PEEK[] 而非 RFC822：只读预览，绝不会因"拉取"而隐式打上 \Seen。
+            # 这样 other/uncertain 邮件即便在读写模式下被 fetch，也不会被误标已读；
+            # 只有 mark_as_read() 显式 STORE +FLAGS (\Seen) 才会真正标记已读。
+            result, data = imap.uid("FETCH", str(uid), "(BODY.PEEK[])")
             if result != "OK" or not data or data[0] is None:
                 logger.warning(f"拉取 UID {uid} 失败: {result}")
                 return None
