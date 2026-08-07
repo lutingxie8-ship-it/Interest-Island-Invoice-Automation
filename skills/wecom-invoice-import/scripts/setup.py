@@ -68,6 +68,8 @@ def check_dev_browser():
     print("[✗] dev-browser 未找到")
     print("    WorkBuddy 用户：通常已自带，重启 WorkBuddy 后重试")
     print("    其他用户：git clone https://github.com/SawyerHood/dev-browser.git && cd dev-browser && npm install -g && dev-browser install")
+    print("    ⚠️  国内网络：dev-browser install 需下载 Chromium（~150MB），若超时请先设镜像：")
+    print("    set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright/")
     return False
 
 
