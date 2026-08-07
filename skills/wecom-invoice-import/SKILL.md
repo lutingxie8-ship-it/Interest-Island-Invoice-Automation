@@ -1,6 +1,9 @@
 ---
 name: wecom-invoice-import
 description: "把税务局导出的Excel发票记录批量录入到企微在线表格。当用户说'把发票录入企微'、'导入发票到企微文档'、'Excel发票导入在线表格'、'批量录入开票记录'、'发票登记'时使用此skill。通过dev-browser浏览器自动化+剪贴板TSV粘贴技术，绕过企微无API权限/无企业认证的限制，实现自动读取Excel→查重→导航空行→粘贴→验证的完整流程。"
+version: 1.0.0
+tier: write_with_safety_guard
+priority: high
 agent_created: true
 ---
 
@@ -42,7 +45,7 @@ python "<skill目录>/scripts/read_excel_to_tsv.py" "<excel文件路径>" > tsv.
 
 脚本读取「信息汇总表」sheet，跳过表头和合计行，按映射提取字段，输出 **8列TSV** 到 stdout。
 
-**字段映射**（Excel信息汇总表 → 企微表格）：
+**字段映射**（Excel信息汇总表 → 企微表格，列号均为企微表格引擎 0-based 列，即从 A=0 起）：
 
 | 企微列 | Excel列(序号) | 处理 |
 |--------|-------------|------|
@@ -55,7 +58,7 @@ python "<skill目录>/scripts/read_excel_to_tsv.py" "<excel文件路径>" > tsv.
 | 开票金额(col8) | 20 | 直接取 |
 | 订单ID(col9) | 27 | 直接取 |
 
-> 注：脚本会自动在每行前补 2 个空 tab 凑成 10 列，从 A 列起粘，确保日期落 col2、发票号落 col4、订单号落 col9，杜绝列偏移。
+> 注：`read_excel_to_tsv.py` 输出 **8 列** TSV；由 `wecom_invoice_import.js` 在每行前补 2 个空 tab 凑成 **10 列**，从 A 列（引擎 col0）起粘，确保日期落 col2、发票号落 col4、订单号落 col9，杜绝列偏移。
 
 ### 第2步：写输入JSON + 运行录入脚本
 
@@ -82,6 +85,8 @@ python "<skill目录>/scripts/read_excel_to_tsv.py" "<excel文件路径>" > tsv.
 python tools/build_all.py
 dev-browser --browser wecom --idle-timeout 30m --timeout 240 run "build/wecom_invoice_import.merged.js"
 ```
+
+> 💡 **部署版说明**：本 skill 全局部署后自带构建产物（`build/wecom_invoice_import.merged.js`），**无需再执行 build_all.py**，直接 `dev-browser run "build/wecom_invoice_import.merged.js"` 即可。
 
 脚本分 8 步执行，每步打印 `[步骤 n/8]` 进度日志：
 1. 全新加载企微文档（清残留态防幽灵粘贴）

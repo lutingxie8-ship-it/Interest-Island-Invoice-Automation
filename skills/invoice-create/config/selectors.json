@@ -132,7 +132,7 @@
         "required": false,
         "selector": ".el-dialog textarea[placeholder*='备注']",
         "max_chars": 400,
-        "note": "本 skill 默认不处理备注字段"
+        "note": "每次新建自动填入\"订单号：{真实订单号}\"；调用方传 remarks 时追加其后（用；分隔）。代码通过 setInputValueInDialog(page,'备注',value) 填写"
       }
     },
     "buttons": {

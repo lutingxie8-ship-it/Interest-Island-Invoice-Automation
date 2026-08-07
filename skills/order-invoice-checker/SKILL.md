@@ -1,5 +1,5 @@
 ---
-name: interest_island_invoice_checker
+name: order-invoice-checker
 description: 兴趣岛订单开票核验 Skill。读取主订单ID，通过浏览器自动化进入兴趣岛管理系统查询订单状态和发票信息，判断是否可以继续进入税务局开票流程。只读操作，禁止修改/删除/创建订单数据。
 version: 2.0.0
 tier: read_only_verification
@@ -22,8 +22,8 @@ priority: high
 
 ```json
 {
-  "order_id": "9000000783104504",
-  "task_id": "INV-20260727-002"
+  "order_id": "9999000000000004",
+  "task_id": "INV-20260806-002"
 }
 ```
 
@@ -87,7 +87,7 @@ dev-browser --browser interest-island --idle-timeout 0 --timeout 60 run script.j
 
 ```bash
 # 正确做法：先写入输入文件，再用文件方式执行
-dev-browser --browser interest-island --idle-timeout 0 --timeout 120 run "C:\Users\EDY\.dev-browser\tmp\interest_island_order_check.js"
+dev-browser --browser interest-island --idle-timeout 0 --timeout 120 run "C:\Users\<用户名>\.dev-browser\tmp\interest_island_order_check.js"
 ```
 
 或从项目路径直接运行：
@@ -97,6 +97,8 @@ dev-browser --browser interest-island --idle-timeout 0 --timeout 120 run "C:\Use
 python tools/build_all.py
 dev-browser --browser interest-island --idle-timeout 0 --timeout 120 run "build/interest_island_order_check.merged.js"
 ```
+
+> 💡 **部署版说明**：本 skill 全局部署后自带构建产物（`build/interest_island_order_check.merged.js`），**无需再执行 build_all.py**，直接 `dev-browser run "build/interest_island_order_check.merged.js"` 即可。
 
 ### 3. 读取输出
 
@@ -133,11 +135,13 @@ cat ~/.dev-browser/tmp/interest_island_output.json
 
 ## 已验证测试场景
 
+> ⚠️ 下表为**开发期**测试订单号，真实系统可能已不存在（实测 `9999000000000004` 返回"暂无数据"→ `manual_review`）。实际使用时请以**真实订单号**为准。
+
 | 订单号 | 发票类型 | 抬头 | 结果 |
 |--------|---------|------|------|
-| `9000000619462400` | 增值税专用发票 | 湖南金格建筑科技有限公司 | ✅ 已开票 |
-| `9000000783104504` | 电子普通发票 | 党霄霞（个人） | ✅ 已开票 |
-| `9000000776180002` | 电子普通发票 | 重庆市綦江区源聚农业旅游开发有限公司 | ✅ 已开票（滚动修复后） |
+| `9999000000000005` | 增值税专用发票 | XX建筑科技有限公司 | ✅ 已开票 |
+| `9999000000000004` | 电子普通发票 | 张三（个人） | ✅ 已开票 |
+| `9999000000000002` | 电子普通发票 | XX科技有限公司 | ✅ 已开票（滚动修复后） |
 
 ## 约束
 
@@ -157,13 +161,15 @@ cat ~/.dev-browser/tmp/interest_island_output.json
 
 ## 文件结构
 
-本 skill 位于多 skill 仓库 `interest_island_invoice_checker/skills/order-invoice-checker/`：
+本 skill 位于多 skill 仓库 `Interest-Island-Invoice-Automation/skills/order-invoice-checker/`：
 
 ```
 order-invoice-checker/
 ├── SKILL.md                                    ← 本文件
 ├── automation/
 │   └── interest_island_order_check.js          ← 主流程脚本 (v2.0 QuickJS)
+├── build/
+│   └── interest_island_order_check.merged.js   ← 构建产物（部署版自带，可直接运行）
 └── config/
     ├── settings.json                           ← URL、浏览器实例、超时配置
     └── selectors.json                          ← DOM 定位策略 + API 参数参考

@@ -17,7 +17,7 @@ logger = setup_logger("table_parser")
 @dataclass
 class ParsedOrder:
     amount_raw: str            # 开票金额原文（如 "3904元"、"1880元"）
-    order_id_raw: str          # 订单号原文（可能含前缀，如 "主订单ID：9000000784169034"）
+    order_id_raw: str          # 订单号原文（可能含前缀，如 "主订单ID：9000000000000001"）
     note: str                  # 备注原文
     title: str = ""            # 发票抬头原文（如 "广州沃道投资管理有限公司"）— 供下游开票
     tax_id: str = ""           # 税号/统一社会信用代码 — 供下游开票（企业必填）
@@ -109,7 +109,7 @@ class TableParser:
             "amount": ["开票金额", "金额", "实付金额"],
             "order_id": ["订单号", "订单编号", "主订单ID"],
             "note": ["备注"],
-            "title": ["发票抬头", "抬头", "购买方名称", "名称"],
+            "title": ["发票抬头", "抬头", "购买方名称", "公司名称"],
             "tax_id": ["税号", "统一社会信用代码", "纳税人识别号", "购方识别号"],
         }
         default_indices = {"amount": 8, "order_id": 10, "note": 14}

@@ -7,7 +7,7 @@
  *   2. 登录检测 → 导航到 /finance/invoice
  *   3. 点击"新建"按钮 → 等待 el-dialog 弹出
  *   4. 填写订单ID → 轮询等待 3 个 auto-fill 字段（所属品类/商品名称/用户ID）
- *   5. 填写开票金额 + 发票类型 + 抬头类型 + 发票抬头 + 企业税号
+ *   5. 填写开票金额 + 发票类型 + 抬头类型 + 发票抬头 + 企业税号 + 备注（默认"订单号：{订单号}"）
  *   6. 上传 PDF（调用方 base64 编码后由 invoice_pdf_base64 传入，沙箱内 atob 还原）
  *   7. 截图弹窗（关键证据）
  *   8. ⚠️ 默认不点确定键！只有 confirm=true 才执行提交
@@ -97,6 +97,15 @@ async function loadAndValidateInput() {
     return {
       ok: false, error: 'invalid_input',
       reason: 'PDF 文件超过 2000KB 限制（' + Math.round(input.pdf_size_bytes / 1024) + ' KB）',
+      input: input
+    };
+  }
+
+  // 强校验：备注长度（可选字段，弹窗备注最长 400 字符）
+  if (input.remarks && String(input.remarks).length > 400) {
+    return {
+      ok: false, error: 'invalid_input',
+      reason: '备注超过 400 字符',
       input: input
     };
   }
@@ -239,7 +248,11 @@ async function setInputValueInDialog(page, labelText, value) {
           if (input.readOnly) return { ok: false, error: 'input is readonly (auto-fill field): ' + labelText };
 
           // Vue v-model 设置：原生 setter + input + change 事件
-          var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+          // ⚠️ textarea 属于 HTMLTextAreaElement，用 HTMLInputElement 的 setter 会抛 Illegal invocation
+          var proto = input instanceof HTMLTextAreaElement
+            ? window.HTMLTextAreaElement.prototype
+            : window.HTMLInputElement.prototype;
+          var nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value').set;
           nativeSetter.call(input, value);
           input.dispatchEvent(new Event('input', { bubbles: true }));
           input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -662,6 +675,24 @@ async function main() {
     }
   }
 
+  // 13.5) 填写备注：默认"订单号：{order_id}"（真实订单号）；调用方传入 remarks 时追加其后
+  var remarkValue = '订单号：' + orderId;
+  if (input.remarks && String(input.remarks).trim() !== '') {
+    remarkValue += '；' + String(input.remarks).trim();
+  }
+  var setRemarkRes = await setInputValueInDialog(page, '备注', remarkValue);
+  log('SET_REMARKS', 'result', setRemarkRes);
+  if (!setRemarkRes.ok) {
+    await writeFile('interest_island_invoice_create_output.json', JSON.stringify({
+      task_id: taskId, order_id: orderId,
+      query_status: 'page_structure_change', result_status: 'rejected',
+      order_id_recognized: true, auto_fill: autoFillRes.auto_fill,
+      decision_reason: '填写备注失败: ' + setRemarkRes.error,
+      safety_check: { confirm_requested: input.confirm, confirm_executed: false, pdf_uploaded: false }
+    }));
+    return { ok: false };
+  }
+
   // 14) 上传 PDF（invoice_pdf_base64 由调用方 base64 编码传入；invoice_pdf_name 可选）
   var uploadRes = await uploadPdf(page, input.invoice_pdf_base64, input.invoice_pdf_name);
   log('UPLOAD_PDF', 'result', uploadRes);
@@ -708,7 +739,8 @@ async function main() {
       invoice_type: input.invoice_type,
       title_type: input.title_type,
       invoice_title: input.invoice_title,
-      company_tax_id: input.title_type === '企业' ? input.company_tax_id : null
+      company_tax_id: input.title_type === '企业' ? input.company_tax_id : null,
+      remarks: remarkValue
     }
   };
 

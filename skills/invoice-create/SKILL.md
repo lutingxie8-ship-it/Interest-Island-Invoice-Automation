@@ -1,5 +1,5 @@
 ---
-name: interest_island_invoice_create
+name: invoice-create
 description: 兴趣岛发票新建 Skill。接收上游开票结果（订单ID、开票金额、发票类型、抬头类型、发票抬头、企业税号、PDF路径），导航到开票审核页 → 点击新建 → 填写弹窗字段。**默认只填到弹窗可提交状态，不点确定键**（防止误提交）；只有显式传入 confirm=true 才会点击确定。
 version: 1.0.0
 tier: write_with_safety_guard
@@ -20,6 +20,7 @@ priority: high
    - 订单ID：直接通过 Vue `input` v-model 设置，**会触发后端 API 自动填充**所属品类/商品名称/用户ID
    - 其他字段：同样通过 Vue 组件 `input`/`change` 事件设置
    - 发票类型/抬头类型：`el-select` 下拉，先点开 → 再点选项
+   - **备注栏**：每次自动填入 `订单号：{真实订单号}`（传 `remarks` 时追加其后），保证每笔记录都能溯源到订单
 4. **上传 PDF**：调用方把 PDF 文件 base64 编码后通过 `invoice_pdf_base64` 传入；脚本在浏览器内 `atob` 还原为 `File` → `DataTransfer` → 驱动 `el-upload` 的 `handleChange`（绕开沙箱 `fs` 禁用与 `readFile` 仅 utf8 的限制）
 5. **关键安全门**：默认**不点击"确定"键**，只填到弹窗可提交状态。需显式传 `confirm: true` 才会点击。
 
@@ -27,16 +28,16 @@ priority: high
 
 ```json
 {
-  "order_id": "9000000776180002",
-  "task_id": "INV-20260727-007",
+  "order_id": "9999000000000002",
+  "task_id": "INV-20260806-001",
   "invoice_amount": "2380.00",
   "invoice_type": "电子普通发票",
   "title_type": "企业",
-  "invoice_title": "重庆市綦江区源聚农业旅游开发有限公司",
-  "company_tax_id": "91500222MA5U6C5Q3N",
+  "invoice_title": "XX科技有限公司",
+  "company_tax_id": "91110000XXXXXXXXXX",
   "invoice_pdf_base64": "<PDF 的 base64 字符串，由调用方读取文件后编码传入>",
-  "invoice_pdf_name": "invoice_9000000776180002.pdf",
-  "remarks": "可选，备注最长400字",
+  "invoice_pdf_name": "invoice_9999000000000002.pdf",
+  "remarks": "可选，备注最长400字；不传时备注栏默认填\"订单号：{订单号}\"",
   "confirm": false
 }
 ```
@@ -53,7 +54,7 @@ priority: high
 | `company_tax_id` | 条件 | `title_type=企业` 时必填，最长100字符 |
 | `invoice_pdf_base64` | ✅ | PDF 二进制经 base64 编码后的字符串（调用方编码传入，沙箱无法读磁盘文件） |
 | `invoice_pdf_name` | ❌ | 可选，PDF 文件名（含 .pdf 后缀），默认 `invoice.pdf` |
-| `remarks` | ❌ | 可选，备注最长400字符 |
+| `remarks` | ❌ | 可选。弹窗「备注」栏**每次自动填入 `订单号：{真实订单号}`**；若传入 remarks 则追加其后（`订单号：xxx；{remarks}`）。备注最长 400 字符 |
 | `confirm` | ❌ | **默认 false**。`true` 才会真正点击确定键 |
 
 ### 发票类型强校验
@@ -127,6 +128,8 @@ python tools/build_all.py
 dev-browser --browser interest-island --idle-timeout 0 --timeout 120 run "build/interest_island_invoice_create.merged.js"
 ```
 
+> 💡 **部署版说明**：本 skill 全局部署后自带构建产物（`build/interest_island_invoice_create.merged.js`），**无需再执行 build_all.py**，直接 `dev-browser run "build/interest_island_invoice_create.merged.js"` 即可。
+
 ### 4. 检查输出
 
 ```bash
@@ -185,7 +188,7 @@ cat ~/.dev-browser/tmp/interest_island_invoice_create_output.json
 | 订单号 | 发票类型 | 抬头类型 | 期望行为 | 实际结果 |
 |--------|---------|---------|---------|---------|
 | `12345` (测试用假订单号) | 电子普通发票 | 个人/非企业 | 订单ID 已填写，3 个 auto-fill 字段超时未填充，安全退出 | ✅ `auto_fill_timeout`，`confirm_executed=false` |
-| `9000000785102111` (真实已开票订单) | 电子普通发票 | 个人/非企业 | 弹窗填到可提交状态：订单ID/auto-fill 3 字段/金额/发票类型/抬头类型/发票抬头/PDF fileList 全部就绪 | ✅ `filled_not_submitted`，所有字段正确填入，PDF fileListLength=1，`confirm_executed=false` |
+| `9999000000000003` (测试用已开票订单) | 电子普通发票 | 个人/非企业 | 弹窗填到可提交状态：订单ID/auto-fill 3 字段/金额/发票类型/抬头类型/发票抬头/PDF fileList 全部就绪 | ✅ `filled_not_submitted`，所有字段正确填入，PDF fileListLength=1，`confirm_executed=false` |
 
 ## 安全约束（最高优先级）
 
@@ -201,7 +204,7 @@ cat ~/.dev-browser/tmp/interest_island_invoice_create_output.json
 - 仅支持正式营订单的"开票审核"页面（`/finance/invoice`）
 - 依赖 Vue 组件结构稳定，兴趣岛改版时可能需要调整弹窗字段定位
 - PDF 上传依赖后端 API，偶发上传失败需重试
-- 弹窗内"备注"字段未在本 skill 中处理（如需填写请扩展）
+- ~~弹窗内"备注"字段未在本 skill 中处理（如需填写请扩展）~~ ✅ 已支持：每次新建自动填「备注」= `订单号：{真实订单号}`（传 `remarks` 时追加其后）
 
 ## 文件结构
 

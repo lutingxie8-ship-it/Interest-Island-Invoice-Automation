@@ -119,6 +119,18 @@ class Config:
             user_config = {}
 
         cls._instance = _deep_merge(DEFAULT_CONFIG, user_config)
+
+        # 环境变量兜底：真实账号/密码不入库，从环境变量注入（脱敏）
+        # 优先读 INVOICE_EMAIL_ACCOUNT / INVOICE_EMAIL_PASSWORD，未设置则回退 config.yaml
+        import os
+        _email = cls._instance.setdefault("email", {})
+        _acct = os.environ.get("INVOICE_EMAIL_ACCOUNT")
+        _pw = os.environ.get("INVOICE_EMAIL_PASSWORD")
+        if _acct:
+            _email["account"] = _acct
+        if _pw:
+            _email["password"] = _pw
+
         return cls._instance
 
     @classmethod

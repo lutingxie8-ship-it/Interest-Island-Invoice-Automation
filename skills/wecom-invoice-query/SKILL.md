@@ -1,6 +1,9 @@
 ---
 name: wecom-invoice-query
 description: "在企微在线表格内查询订单号是否已有开票记录（只读查询，不录入）。当用户说'查一下这个订单开没开过票'、'查询订单号是否已存在'、'检查发票是否已录入'、'核验订单开票状态'时使用此skill。通过dev-browser登录企微文档后，用引擎API遍历订单ID列查询，输出找得到/找不到。注意：此skill只查询不录入，录入请用wecom-invoice-import skill。"
+version: 1.0.0
+tier: read_only_verification
+priority: medium
 agent_created: true
 ---
 
@@ -86,7 +89,7 @@ EOF
 准备输入文件 `~/.dev-browser/tmp/wecom_query_input.json`：
 
 ```json
-{ "order_num": "9000000784169034" }
+{ "order_num": "9999000000000009" }
 ```
 
 运行规范化脚本（实时打印分步日志 + 最终 JSON 到 `wecom_query_output.json`）：
@@ -97,6 +100,8 @@ python tools/build_all.py
 dev-browser --browser wecom --idle-timeout 30m --timeout 90 run "build/wecom_invoice_query.merged.js"
 ```
 
+> 💡 **部署版说明**：本 skill 全局部署后自带构建产物（`build/wecom_invoice_query.merged.js`），**无需再执行 build_all.py**，直接 `dev-browser run "build/wecom_invoice_query.merged.js"` 即可。
+
 脚本会打印类似下面的分步进度，每一步都可见：
 
 ```
@@ -105,7 +110,7 @@ dev-browser --browser wecom --idle-timeout 30m --timeout 90 run "build/wecom_inv
   ✓ 引擎就绪，用时 3200ms
 [步骤 3/5] 等待 Sheet 数据就绪（getRowCount 可用）...
   ✓ Sheet 就绪，用时 1500ms
-[步骤 4/5] 遍历订单ID列查询订单号 9000000784169034 ...
+[步骤 4/5] 遍历订单ID列查询订单号 9999000000000009 ...
 [步骤 5/5] 查询完成，写出结果
 { "found": false }
 ```
@@ -144,24 +149,30 @@ dev-browser --browser wecom --idle-timeout 30m --timeout 90 run "build/wecom_inv
 如果上游任务输出多个订单号，循环执行第2步，每个订单号查询一次。也可以在一个脚本里批量查询：
 
 ```js
-const orderNums = ["订单号1", "订单号2", "订单号3"];
-const results = await page.evaluate((nums) => {
-  const app = window.SpreadsheetApp;
-  const sheet = app.workbook.worksheetManager.getSheetBySheetId(app.workbook.worksheetManager.activeSheetId);
-  
+// ⚠️ QuickJS 沙箱兼容写法：用 var 代替 const/let，用 function 代替箭头函数
+var orderNums = ["订单号1", "订单号2", "订单号3"];
+var results = await page.evaluate(function (nums) {
+  var app = window.SpreadsheetApp;
+  var sheet = app.workbook.worksheetManager.getSheetBySheetId(app.workbook.worksheetManager.activeSheetId);
+
   // 先读取所有行的订单ID列（只遍历一次）
-  const allValues = [];
-  for (let r = 1; r < sheet.getRowCount(); r++) {
-    const cell = sheet.getCellDataAtPosition(r, 9);
-    const val = cell && cell.formattedValue ? cell.formattedValue.value : '';
-    if (val) allValues.push({ row: r, val });
+  var allValues = [];
+  for (var r = 1; r < sheet.getRowCount(); r++) {
+    var cell = sheet.getCellDataAtPosition(r, 9);
+    var val = cell && cell.formattedValue ? cell.formattedValue.value : '';
+    if (val) allValues.push({ row: r, val: val });
   }
-  
+
   // 对每个订单号查询
-  return nums.map(num => ({
-    orderNum: num,
-    found: allValues.some(v => v.val.includes(num)),
-  }));
+  var out = [];
+  for (var i = 0; i < nums.length; i++) {
+    var found = false;
+    for (var j = 0; j < allValues.length; j++) {
+      if (allValues[j].val.indexOf(nums[i]) >= 0) { found = true; break; }
+    }
+    out.push({ orderNum: nums[i], found: found });
+  }
+  return out;
 }, orderNums);
 ```
 

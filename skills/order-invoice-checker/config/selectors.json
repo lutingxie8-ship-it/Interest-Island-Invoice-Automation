@@ -2,14 +2,14 @@
   "_meta": {
     "based_on_real_dom": true,
     "verified_at": "2026-07-27",
-    "verified_on_order_id_9000000619462400": true,
+    "verified_on_order_id_9999000000000005": true,
     "invoice_invoiced_order_verified": true,
     "v2_update": "使用 Vue listQuery 直驱查询，替代不可靠的 DOM 操作",
     "note": "基于实际访问兴趣岛管理系统探查所得。核心发现：日期字段必须 delete（不能设空字符串），否则 API 报'时间范围不可超过1个月'"
   },
   "api": {
     "endpoint": "GET /admin/financialActCharge/list",
-    "params_example": "page=1&limit=20&type=financial&status=&orderId=9000000619462400&resourceCode=%2Forder%2Ffinancial",
+    "params_example": "page=1&limit=20&type=financial&status=&orderId=9999000000000005&resourceCode=%2Forder%2Ffinancial",
     "note": "不带 startTime/endTime 参数则无日期限制。status='' 表示不筛选订单状态"
   },
   "login": {

@@ -10,10 +10,10 @@ from skill.src.order_validator import OrderValidator, ValidatedOrder
 def test_dataclass_default_fields_after_required(base_config):
     """回归点：不传 title/tax_id 应默认 "" 且不抛错，证明字段顺序正确。"""
     o = ValidatedOrder(
-        order_id_original="主订单ID：9000000779908504",
+        order_id_original="主订单ID：9999000000000001",
         amount_raw="3904",
         note="测试",
-        order_id_cleaned="9000000779908504",
+        order_id_cleaned="9999000000000001",
         is_valid=True,
         validation_reason="valid",
         is_urgent=False,
@@ -32,7 +32,7 @@ def test_dataclass_with_title_tax_id(base_config):
         order_id_original="x",
         amount_raw="3904",
         note="",
-        order_id_cleaned="9000000779908504",
+        order_id_cleaned="9999000000000001",
         is_valid=True,
         validation_reason="valid",
         is_urgent=False,
@@ -41,16 +41,16 @@ def test_dataclass_with_title_tax_id(base_config):
         message_sender="",
         message_date="",
         message_id="",
-        title="青岛公司",
-        tax_id="91370202MA7L5FEF9U",
+        title="测试公司",
+        tax_id="91110000MA01TEST01",
     )
-    assert o.title == "青岛公司"
-    assert o.tax_id == "91370202MA7L5FEF9U"
+    assert o.title == "测试公司"
+    assert o.tax_id == "91110000MA01TEST01"
 
 
 def test_clean_order_id():
     v = OrderValidator({})
-    assert v.clean_order_id("主订单ID：9000000779908504") == "9000000779908504"
+    assert v.clean_order_id("主订单ID：9999000000000001") == "9999000000000001"
     assert v.clean_order_id("ORD-12345") == "12345"
     assert v.clean_order_id("") == ""
     assert v.clean_order_id(None) == ""
@@ -58,7 +58,7 @@ def test_clean_order_id():
 
 def test_validate_order_id():
     v = OrderValidator({"order_no": {"valid_lengths": [12, 16]}})
-    assert v.validate_order_id("9000000779908504") == (True, "valid")  # 16 位
+    assert v.validate_order_id("9999000000000001") == (True, "valid")  # 16 位
     assert v.validate_order_id("123456789012") == (True, "valid")      # 12 位
     assert v.validate_order_id("123") == (False, "too_short(3)")
     assert v.validate_order_id("") == (False, "empty")
@@ -79,7 +79,7 @@ def test_process_orders_full(base_config):
     validator = OrderValidator(base_config)
     entries = [{
         "classification": type("C", (), {"is_urgent": True})(),
-        "orders": [ParsedOrder(amount_raw="3904", order_id_raw="9000000779908504", note="加急单")],
+        "orders": [ParsedOrder(amount_raw="3904", order_id_raw="9999000000000001", note="加急单")],
         "is_urgent": True,
         "message": type("M", (), {
             "subject": "s", "sender": "u", "date": "2026-08-04", "message_id": "m1"
